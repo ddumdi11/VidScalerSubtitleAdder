@@ -53,7 +53,20 @@ class AudioTranscriber:
         self.setup_ui()
         
     def setup_ui(self):
-        """Erstellt die Benutzeroberfläche"""
+        """
+        Set up the transcription tool's Tkinter user interface.
+        
+        Creates and lays out the main window contents used by AudioTranscriber:
+        - Header and video filename label.
+        - Whisper model and language selection controls (radio buttons).
+        - Action buttons for extracting audio, transcribing, and exporting (with initial enabled/disabled states).
+        - Progress label and indeterminate progress bar.
+        - Results area containing a scrollable Treeview of detected segments and an editor for selected segment text.
+        - Event bindings (Treeview selection to load a segment into the editor) and grid weight configuration for responsive resizing.
+        
+        Side effects:
+        - Initializes instance UI-related attributes such as self.model_var, self.language_var, self.extract_button, self.transcribe_button, self.export_button, self.progress_var, self.progress_label, self.progress_bar, self.segments_tree, and self.edit_text.
+        """
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
