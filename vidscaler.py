@@ -157,10 +157,10 @@ class VidScalerApp:
         method_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
         ttk.Label(method_frame, text="Methode:").grid(row=0, column=0, sticky=tk.W)
-        self.translation_method_var = tk.StringVar(value="google")
+        self.translation_method_var = tk.StringVar(value="OpenAI (beste Qualität)")
         self.method_combo = ttk.Combobox(method_frame, textvariable=self.translation_method_var, 
                                        width=20, state="readonly")
-        self.method_combo['values'] = ["Google Translate (schnell)", "Whisper (hochwertig)"]
+        self.method_combo['values'] = ["OpenAI (beste Qualität)", "Google Translate (schnell)", "Whisper (hochwertig)"]
         self.method_combo.bind('<<ComboboxSelected>>', self._on_method_change)
         self.method_combo.grid(row=0, column=1, sticky=tk.W, padx=(5, 15))
         
@@ -501,7 +501,10 @@ class VidScalerApp:
             if method_text == "Whisper (hochwertig)":
                 method = "whisper"
                 whisper_model = self.whisper_model_var.get().split()[0]  # "base (empfohlen)" -> "base"
-            else:
+            elif method_text == "OpenAI (beste Qualität)":
+                method = "openai"
+                whisper_model = "base"
+            else:  # "Google Translate (schnell)"
                 method = "google"
                 whisper_model = "base"
             

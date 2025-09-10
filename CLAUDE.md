@@ -130,7 +130,7 @@ pip install openai-whisper matplotlib pydub translators smart-srt-translator
 ## 🚀 Phase 4 Features (Bidirektionale Whisper-Übersetzung) - ✅ IMPLEMENTIERT!
 - **✅ WhisperTranslator-Klasse**: Audio-Extraktion + Whisper-Transkription in Zielsprache
 - **✅ Smart Timing-Mapping**: Whisper-Segmente auf Original-SRT-Timing gemappt
-- **✅ Dual Translation Methods**: Google Translate (schnell) vs Whisper (hochwertig)
+- **✅ Triple Translation Methods**: OpenAI (beste Qualität) vs Google Translate (schnell) vs Whisper (English-only)
 - **✅ GUI Method-Selection**: Dropdown mit dynamischen Whisper-Model-Optionen
 - **✅ Model Caching**: Whisper-Modelle werden wiederverwendet für Performance
 - **✅ Robustes Cleanup**: Automatische Bereinigung aller temporären Audio-Dateien
@@ -144,7 +144,7 @@ pip install openai-whisper matplotlib pydub translators smart-srt-translator
 
 ## 🎉 Phase 5 Features (Production Quality & UX) - ✅ FERTIG!
 - **✅ Smart-SRT-Translator Integration**: Lokales `smart_translation.py` durch PyPI-Modul ersetzt
-- **✅ Optimierte GUI-Defaults**: Fenstergröße, Audio-Transkription (Small+English), Übersetzung (EN-Source)
+- **✅ Optimierte GUI-Defaults**: Fenstergröße, Audio-Transkription (Small+English), Übersetzung (OpenAI+EN-Source)
 - **✅ Benutzerfreundlichkeit**: Alle Standard-Einstellungen auf häufigste Use-Cases optimiert
 - **✅ Modular Architecture**: Externe Dependencies über offizielle Package-Manager
 
