@@ -252,7 +252,25 @@ class SubtitleTranslator:
     def translate_srt(self, input_path: str, source_lang: str, target_lang: str, 
                      method: str = "google", video_path: str = None, 
                      whisper_model: str = "base") -> str:
-        """Übersetzt eine SRT-Datei und gibt den Pfad der übersetzten Datei zurück"""
+        """
+                     Translate an SRT file into the target language and return the path to the translated SRT.
+                     
+                     This function selects a translation backend based on `method` and available optional dependencies:
+                     - "openai" or "auto": attempt LLM-based timed translation via smart_srt_translator (if available); on failure falls back to other methods.
+                     - "whisper": use Whisper-based transcription-to-translation that maps transcripts back to the original SRT timings (requires `video_path` and Whisper availability).
+                     - "google": translate using the translators library.
+                     
+                     Parameters that require non-obvious context:
+                     - method: one of "google", "whisper", "openai", or "auto". Behavior depends on availability flags for optional backends.
+                     - video_path: required when method == "whisper"; path to the source video used for transcription.
+                     - whisper_model: Whisper model size to load when using the "whisper" method.
+                     
+                     Returns:
+                         str: Path to the generated translated SRT file.
+                     
+                     Raises:
+                         Exception: If the requested method is unavailable, required dependencies are missing, or `video_path` is not provided for Whisper.
+                     """
         # OpenAI (LLM) Uebersetzung via smart-srt-translator, falls verfuegbar
         if method in ("openai", "auto") and SMART_TRANSLATION_AVAILABLE:
             try:
