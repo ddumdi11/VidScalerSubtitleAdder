@@ -114,7 +114,7 @@ VidScaler/
 
 ## Installation (Alle Dependencies)
 ```bash
-pip install openai-whisper matplotlib pydub translators
+pip install openai-whisper matplotlib pydub translators smart-srt-translator --index-url https://test.pypi.org/simple/
 ```
 
 ## 🎉 Phase 3 Features (Übersetzung) - ✅ PRODUKTIONSREIF!
@@ -142,7 +142,13 @@ pip install openai-whisper matplotlib pydub translators
 3. **Übersetzung aktivieren** → Sprachen + **Methode** wählen → Modus wählen
 4. **"Mit Übersetzung skalieren"** → Fertig!
 
-## 📋 Phase 5 Roadmap (Planned)
+## 🎉 Phase 5 Features (Production Quality & UX) - ✅ FERTIG!
+- **✅ Smart-SRT-Translator Integration**: Lokales `smart_translation.py` durch PyPI-Modul ersetzt
+- **✅ Optimierte GUI-Defaults**: Fenstergröße, Audio-Transkription (Small+English), Übersetzung (EN-Source)
+- **✅ Benutzerfreundlichkeit**: Alle Standard-Einstellungen auf häufigste Use-Cases optimiert
+- **✅ Modular Architecture**: Externe Dependencies über offizielle Package-Manager
+
+## 📋 Phase 6 Roadmap (Future)
 - **🎯 Translation Editor**: GUI-Fenster zum manuellen Korrigieren von Übersetzungen
 - **📝 Segment-by-Segment Editing**: Wie AudioTranscriber, aber für übersetzte Texte
 - **🔄 Export-Integration**: Korrigierte Übersetzung direkt in Video-Pipeline

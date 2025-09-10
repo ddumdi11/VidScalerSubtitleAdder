@@ -13,9 +13,9 @@ try:
 except ImportError:
     TRANSLATORS_AVAILABLE = False
 
-# Optional high-quality LLM translation module (OpenAI)
+# Optional high-quality LLM translation module (OpenAI) - now using smart-srt-translator package
 try:
-    from smart_translation import translate_srt as smart_translate_srt
+    from smart_srt_translator import translate_srt as smart_translate_srt
     SMART_TRANSLATION_AVAILABLE = True
 except Exception:
     SMART_TRANSLATION_AVAILABLE = False
@@ -253,7 +253,7 @@ class SubtitleTranslator:
                      method: str = "google", video_path: str = None, 
                      whisper_model: str = "base") -> str:
         """Übersetzt eine SRT-Datei und gibt den Pfad der übersetzten Datei zurück"""
-        # OpenAI (LLM) Uebersetzung via smart_translation, falls verfuegbar
+        # OpenAI (LLM) Uebersetzung via smart-srt-translator, falls verfuegbar
         if method in ("openai", "auto") and SMART_TRANSLATION_AVAILABLE:
             try:
                 return smart_translate_srt(

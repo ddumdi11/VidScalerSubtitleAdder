@@ -71,7 +71,7 @@ class AudioTranscriber:
         model_frame = ttk.LabelFrame(main_frame, text="Whisper Modell", padding="5")
         model_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        self.model_var = tk.StringVar(value="base")
+        self.model_var = tk.StringVar(value="small")
         models = [("Tiny (schnell, weniger genau)", "tiny"), 
                   ("Base (empfohlen)", "base"),
                   ("Small (langsamer, genauer)", "small")]
@@ -84,7 +84,7 @@ class AudioTranscriber:
         lang_frame = ttk.LabelFrame(main_frame, text="Sprache", padding="5")
         lang_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        self.language_var = tk.StringVar(value="de")
+        self.language_var = tk.StringVar(value="en")
         languages = [("Deutsch", "de"), ("Englisch", "en"), ("Auto-Erkennung", "auto")]
         
         for i, (text, value) in enumerate(languages):

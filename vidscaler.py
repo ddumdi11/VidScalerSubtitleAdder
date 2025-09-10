@@ -16,7 +16,7 @@ class VidScalerApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("VidScaler - Video Skalierung")
-        self.root.geometry("600x500")
+        self.root.geometry("600x600")
         
         self.video_processor = VideoProcessor()
         self.current_video_path: Optional[str] = None
@@ -119,7 +119,7 @@ class VidScalerApp:
         lang_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
         ttk.Label(lang_frame, text="Von:").grid(row=0, column=0, sticky=tk.W)
-        self.source_lang_var = tk.StringVar(value="auto")
+        self.source_lang_var = tk.StringVar(value="en")
         self.source_lang_combo = ttk.Combobox(lang_frame, textvariable=self.source_lang_var, 
                                             width=12, state="readonly")
         self.source_lang_combo['values'] = ["auto", "de", "en", "fr", "es", "it", "pt", "ru", "zh"]
