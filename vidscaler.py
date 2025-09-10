@@ -14,6 +14,13 @@ from utils import get_video_info, generate_scaling_options
 
 class VidScalerApp:
     def __init__(self, root: tk.Tk):
+        """
+        Initialize the VidScalerApp GUI.
+        
+        Sets up the main Tk window (title and geometry), creates the VideoProcessor, and initializes application state
+        placeholders for the currently selected video, its resolution, and any subtitle path. Builds the UI by calling
+        setup_ui().
+        """
         self.root = root
         self.root.title("VidScaler - Video Skalierung")
         self.root.geometry("600x600")
@@ -26,7 +33,20 @@ class VidScalerApp:
         self.setup_ui()
         
     def setup_ui(self):
-        """Erstellt die Benutzeroberfläche"""
+        """
+        Builds the application's main tkinter user interface and initializes all widgets and their callbacks.
+        
+        Creates sections and widgets for:
+        - video selection (file entry + browse),
+        - video info (resolution label),
+        - scaling options (width combobox),
+        - subtitles (subtitle path entry, browse, audio transcription, text excerpt),
+        - optional translation (enable checkbox, source/target language selectors, translation method and whisper model selector, translation mode radio buttons),
+        - action buttons (analyze, scale, scale with subtitles, scale with translation),
+        - progress label and indeterminate progress bar.
+        
+        Translation-related widgets are initially disabled; the subtitle path variable is traced to update UI state when changed. Widgets are laid out using ttk and grid geometry.
+        """
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
