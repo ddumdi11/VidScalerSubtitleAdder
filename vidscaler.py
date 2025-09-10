@@ -165,7 +165,7 @@ class VidScalerApp:
         self.method_combo.grid(row=0, column=1, sticky=tk.W, padx=(5, 15))
         
         # Whisper-Modell-Auswahl (initial versteckt)
-        self.whisper_model_var = tk.StringVar(value="base")
+        self.whisper_model_var = tk.StringVar(value="small")
         self.whisper_label = ttk.Label(method_frame, text="Modell:")
         self.whisper_combo = ttk.Combobox(method_frame, textvariable=self.whisper_model_var, 
                                         width=12, state="readonly")

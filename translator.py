@@ -55,7 +55,16 @@ class WhisperTranslator:
     
     def translate_via_whisper(self, video_path: str, original_srt_path: str, 
                             target_lang: str, model_size: str = "base") -> str:
-        """Übersetzt Video via Whisper-Transkription mit Original-Timing"""
+        """
+        Translates video audio to English via Whisper with original SRT timing.
+        
+        Note: Whisper's translate task can ONLY output English. The target_lang
+        parameter must be 'en' or this method will raise an exception.
+        """
+        # Validate that target language is English
+        if target_lang != "en":
+            raise Exception(f"Whisper translate task only supports English output, not '{target_lang}'")
+        
         try:
             # 1. Audio extrahieren
             audio_path = self.extract_audio_for_whisper(video_path)
@@ -68,10 +77,10 @@ class WhisperTranslator:
             # 3. Original SRT-Timing lesen
             original_segments = self._parse_srt_timing(original_srt_path)
             
-            # 4. Whisper-Transkription in Zielsprache
+            # 4. Whisper-Translation (to English only)
             result = self.model.transcribe(
                 audio_path, 
-                language=target_lang if target_lang != 'auto' else None,
+                task="translate",  # Use translate task, not transcribe
                 word_timestamps=True
             )
             
@@ -257,7 +266,7 @@ class SubtitleTranslator:
                      
                      This function selects a translation backend based on `method` and available optional dependencies:
                      - "openai" or "auto": attempt LLM-based timed translation via smart_srt_translator (if available); on failure falls back to other methods.
-                     - "whisper": use Whisper-based transcription-to-translation that maps transcripts back to the original SRT timings (requires `video_path` and Whisper availability).
+                     - "whisper": use Whisper-based transcription-to-translation that maps transcripts back to the original SRT timings (requires `video_path` and Whisper availability). Note: Whisper can only translate TO English ('en'), target_lang will be forced to 'en'.
                      - "google": translate using the translators library.
                      
                      Parameters that require non-obvious context:
@@ -285,11 +294,13 @@ class SubtitleTranslator:
                 print(f"OpenAI-Uebersetzung fehlgeschlagen, Fallback auf Google: {e}")
 
         if method == "whisper" and self.has_whisper and video_path:
-            # Whisper-Übersetzung
+            # Whisper-Übersetzung (nur nach Englisch möglich)
+            if target_lang != "en":
+                raise Exception(f"Whisper kann nur nach Englisch ('en') übersetzen, nicht nach '{target_lang}'. Verwende stattdessen 'google' oder 'openai' Methode.")
             if self.whisper_translator is None:
                 self.whisper_translator = WhisperTranslator()
             return self.whisper_translator.translate_via_whisper(
-                video_path, input_path, target_lang, whisper_model
+                video_path, input_path, "en", whisper_model  # Force target to English
             )
         
         elif method == "google" and self.has_translators:
