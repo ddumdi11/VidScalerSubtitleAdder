@@ -80,7 +80,7 @@ class VideoProcessor:
             # ffprobe verwenden für genauere Informationen
             ffprobe_path = shutil.which('ffprobe') or 'ffprobe'
             cmd = [
-                os.path.abspath(ffprobe_path), '-nostdin',
+                os.path.abspath(ffprobe_path),
                 '-v', 'error',
                 '-select_streams', 'v:0',
                 '-show_entries', 'stream=width,height',
