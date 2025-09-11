@@ -12,6 +12,9 @@ from typing import List, Dict, Optional, Callable
 import subprocess
 import json
 
+# FFmpeg timeout constant (in seconds)
+FFMPEG_TIMEOUT = 300  # 5 minutes should be enough for audio extraction
+
 # Windows-spezifische subprocess-Konfiguration um Console-Fenster zu unterdrücken
 if sys.platform == "win32":
     SUBPROCESS_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW}
@@ -199,7 +202,7 @@ class AudioTranscriber:
             
             # FFmpeg Befehl für Audio-Extraktion
             cmd = [
-                "ffmpeg", "-i", self.video_path,
+                "ffmpeg", "-nostdin", "-i", self.video_path,
                 "-vn",  # Kein Video
                 "-acodec", "pcm_s16le",  # WAV Format
                 "-ar", "16000",  # 16kHz Sample Rate für Whisper
@@ -208,14 +211,29 @@ class AudioTranscriber:
                 self.temp_audio_path
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, **SUBPROCESS_FLAGS)
-            
-            if result.returncode != 0:
-                raise Exception(f"FFmpeg Fehler: {result.stderr}")
+            # Hardened subprocess invocation with proper error handling
+            subprocess.run(
+                cmd, 
+                capture_output=True, 
+                text=True, 
+                shell=False, 
+                timeout=FFMPEG_TIMEOUT, 
+                check=True, 
+                **SUBPROCESS_FLAGS
+            )
             
             self.root.after(0, self._extraction_complete)
             
+        except subprocess.CalledProcessError as e:
+            # FFmpeg failed with non-zero exit code
+            error_msg = f"FFmpeg Fehler (Exit Code {e.returncode}):\nStderr: {e.stderr}\nStdout: {e.stdout}"
+            self.root.after(0, self._extraction_error, error_msg)
+        except subprocess.TimeoutExpired as e:
+            # FFmpeg timed out
+            error_msg = f"FFmpeg Timeout nach {FFMPEG_TIMEOUT}s - Video möglicherweise zu groß oder beschädigt"
+            self.root.after(0, self._extraction_error, error_msg)
         except Exception as e:
+            # Other errors (file not found, permission issues, etc.)
             self.root.after(0, self._extraction_error, str(e))
             
     def _extraction_complete(self):

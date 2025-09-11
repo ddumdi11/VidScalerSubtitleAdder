@@ -11,6 +11,10 @@ import shlex
 import shutil
 import tempfile
 
+# FFmpeg timeout constants (in seconds)
+FFMPEG_TIMEOUT_SHORT = 30    # For quick operations (version check, etc.)
+FFMPEG_TIMEOUT_LONG = 600    # For video processing (10 minutes)
+
 # Windows-spezifische subprocess-Konfiguration um Console-Fenster zu unterdrücken
 if sys.platform == "win32":
     SUBPROCESS_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW}
@@ -52,7 +56,7 @@ class VideoProcessor:
         try:
             # ffprobe verwenden für genauere Informationen
             cmd = [
-                'ffprobe', 
+                'ffprobe', '-nostdin',
                 '-v', 'error',
                 '-select_streams', 'v:0',
                 '-show_entries', 'stream=width,height',
@@ -60,7 +64,8 @@ class VideoProcessor:
                 video_path
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
+            result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
+                                  timeout=FFMPEG_TIMEOUT_SHORT, check=True, **SUBPROCESS_FLAGS)
             dimensions = result.stdout.strip().split('x')
             
             if len(dimensions) != 2:
@@ -85,15 +90,16 @@ class VideoProcessor:
             
             # Erste Versuch: Wie dein ursprünglicher Befehl
             cmd = [
-                self.ffmpeg_path,
+                self.ffmpeg_path, '-nostdin',
                 '-i', input_path,
                 '-vf', f'scale={new_width}:-1',  # -1 für proportionale Höhe (wie ursprünglich)
                 '-y',  # Überschreibe Ausgabedatei ohne Nachfrage
                 output_path
             ]
             
-            # Führe FFmpeg-Befehl aus
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
+            # Führe FFmpeg-Befehl aus (hardened with timeout)
+            result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
+                                  timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
             
             # Prüfe, ob Ausgabedatei erstellt wurde
             if not os.path.exists(output_path):
@@ -107,13 +113,14 @@ class VideoProcessor:
                 try:
                     # Fallback: Verwende -2 für gerade Höhe (wie du es manuell machst)
                     fallback_cmd = [
-                        self.ffmpeg_path,
+                        self.ffmpeg_path, '-nostdin',
                         '-i', input_path,
                         '-vf', f'scale={new_width}:-2',  # -2 erzwingt gerade Höhe
                         '-y',
                         output_path
                     ]
-                    subprocess.run(fallback_cmd, capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
+                    subprocess.run(fallback_cmd, capture_output=True, text=True, shell=False,
+                                 timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
                     
                     # Prüfe, ob Ausgabedatei erstellt wurde
                     if not os.path.exists(output_path):
@@ -130,8 +137,9 @@ class VideoProcessor:
     def is_ffmpeg_available(self) -> bool:
         """Prüft, ob FFmpeg verfügbar ist"""
         try:
-            subprocess.run([self.ffmpeg_path, '-version'], 
-                         capture_output=True, check=True, **SUBPROCESS_FLAGS)
+            subprocess.run([self.ffmpeg_path, '-nostdin', '-version'], 
+                         capture_output=True, shell=False, timeout=FFMPEG_TIMEOUT_SHORT, 
+                         check=True, **SUBPROCESS_FLAGS)
             return True
         except:
             return False
@@ -139,8 +147,9 @@ class VideoProcessor:
     def get_ffmpeg_version(self) -> str:
         """Gibt FFmpeg-Version zurück"""
         try:
-            result = subprocess.run([self.ffmpeg_path, '-version'], 
-                                 capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
+            result = subprocess.run([self.ffmpeg_path, '-nostdin', '-version'], 
+                                 capture_output=True, text=True, shell=False, 
+                                 timeout=FFMPEG_TIMEOUT_SHORT, check=True, **SUBPROCESS_FLAGS)
             # Erste Zeile enthält Version
             first_line = result.stdout.split('\n')[0]
             return first_line
@@ -166,15 +175,16 @@ class VideoProcessor:
             # FFmpeg-Befehl: Video erweitern und Untertitel einbrennen
             # Verwende einfachen relativen Pfad
             cmd = [
-                self.ffmpeg_path,
+                self.ffmpeg_path, '-nostdin',
                 '-i', input_path,
                 '-vf', f'scale={new_width}:-2,pad=iw:ih+{subtitle_padding}:0:0:black,subtitles=temp_subtitles.srt',
                 '-y',  # Überschreibe Ausgabedatei ohne Nachfrage
                 output_path
             ]
             
-            # Führe FFmpeg-Befehl aus
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
+            # Führe FFmpeg-Befehl aus (hardened with timeout)
+            result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
+                                  timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
             
             # Prüfe, ob Ausgabedatei erstellt wurde
             if not os.path.exists(output_path):
@@ -201,9 +211,10 @@ class VideoProcessor:
         temp_original_ass = temp_translated_ass = None
 
         def _convert_srt_to_ass(src_srt: str, dst_ass: str):
-            # SRT -> ASS (UTF-8 erzwingen)
-            subprocess.run([self.ffmpeg_path, "-loglevel", "error", "-y", "-sub_charenc", "UTF-8", "-i", src_srt, dst_ass],
-                capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
+            # SRT -> ASS (UTF-8 erzwingen) - hardened subprocess call
+            subprocess.run([self.ffmpeg_path, "-nostdin", "-loglevel", "error", "-y", "-sub_charenc", "UTF-8", "-i", src_srt, dst_ass],
+                capture_output=True, text=True, shell=False, timeout=FFMPEG_TIMEOUT_SHORT, 
+                check=True, **SUBPROCESS_FLAGS)
 
         def _ensure_wrapstyle(ass_path: str, wrap_style: int = 3):
             # 0/3 = “smart” (3 bevorzugt meist gleichmäßiger),
@@ -320,10 +331,11 @@ class VideoProcessor:
                     f"ass=filename={os.path.basename(temp_translated_ass)}"
                 )
 
-                cmd = [self.ffmpeg_path, "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
+                cmd = [self.ffmpeg_path, "-nostdin", "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
 
-            # Ausführen
-            subprocess.run(cmd, capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
+            # Ausführen (hardened with timeout)
+            subprocess.run(cmd, capture_output=True, text=True, shell=False, 
+                         timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
 
             if not os.path.exists(output_path):
                 raise RuntimeError("Ausgabedatei wurde nicht erstellt")
