@@ -242,7 +242,7 @@ class VideoProcessor:
 
 
         def _tweak_ass_style(ass_path: str, *, alignment: int, margin_v: int,
-                             font_size: int = 15, outline: int = 2, shadow: int = 0, # vorher 20, jetzt 15
+                             font_size: int = 13, outline: int = 2, shadow: int = 0, # vorher 20→15, jetzt 13
                              margin_l: int = 2, margin_r: int = 2): # vorher 10/10, jetzt 2/2
             # Passe "Style: Default,..." an (ASS V4+ Format-Reihenfolge)
             with open(ass_path, "r", encoding="utf-8") as f:

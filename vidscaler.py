@@ -11,6 +11,13 @@ import threading
 from video_processor import VideoProcessor
 from utils import get_video_info, generate_scaling_options
 
+# Translation method mapping for maintainability and localization
+TRANSLATION_METHODS = {
+    "OpenAI (beste Qualität)": {"method": "auto", "whisper_model": "base", "progress_label": "OpenAI"},
+    "Google Translate (schnell)": {"method": "google", "whisper_model": "base", "progress_label": "Google"},
+    "Whisper (hochwertig)": {"method": "whisper", "whisper_model": "base", "progress_label": "Whisper"},
+}
+
 
 class VidScalerApp:
     def __init__(self, root: tk.Tk):
@@ -102,7 +109,7 @@ class VidScalerApp:
         subtitle_frame.grid(row=7, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
         
         self.subtitle_path_var = tk.StringVar()
-        self.subtitle_path_var.trace('w', self._on_subtitle_path_change)  # Callback für Pfad-Änderungen
+        self.subtitle_path_var.trace_add('write', self._on_subtitle_path_change)  # Callback für Pfad-Änderungen
         self.subtitle_entry = ttk.Entry(subtitle_frame, textvariable=self.subtitle_path_var, width=40)
         self.subtitle_entry.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 10))
         
@@ -160,7 +167,7 @@ class VidScalerApp:
         self.translation_method_var = tk.StringVar(value="OpenAI (beste Qualität)")
         self.method_combo = ttk.Combobox(method_frame, textvariable=self.translation_method_var, 
                                        width=20, state="readonly")
-        self.method_combo['values'] = ["OpenAI (beste Qualität)", "Google Translate (schnell)", "Whisper (hochwertig)"]
+        self.method_combo['values'] = list(TRANSLATION_METHODS.keys())
         self.method_combo.bind('<<ComboboxSelected>>', self._on_method_change)
         self.method_combo.grid(row=0, column=1, sticky=tk.W, padx=(5, 15))
         
@@ -496,19 +503,18 @@ class VidScalerApp:
             target_lang = self.target_lang_var.get()
             translation_mode = self.translation_mode_var.get()
             
-            # Übersetzungsmethode bestimmen
+            # Übersetzungsmethode bestimmen (using centralized mapping)
             method_text = self.translation_method_var.get()
-            if method_text == "Whisper (hochwertig)":
-                method = "whisper"
-                whisper_model = self.whisper_model_var.get().split()[0]  # "base (empfohlen)" -> "base"
-            elif method_text == "OpenAI (beste Qualität)":
-                method = "auto"  # Use auto to trigger OpenAI with fallback
-                whisper_model = "base"
-            else:  # "Google Translate (schnell)"
-                method = "google"
-                whisper_model = "base"
+            cfg = TRANSLATION_METHODS.get(method_text, TRANSLATION_METHODS["OpenAI (beste Qualität)"])
+            method = cfg["method"]
+            whisper_model = cfg["whisper_model"]
             
-            self.root.after(0, lambda: self.progress_var.set(f"Untertitel werden übersetzt ({method})..."))
+            # Override whisper model if method is whisper and user selected specific model
+            if method == "whisper":
+                whisper_model = self.whisper_model_var.get().split()[0]  # "base (empfohlen)" -> "base"
+            
+            progress_label = cfg["progress_label"]
+            self.root.after(0, lambda: self.progress_var.set(f"Untertitel werden übersetzt ({progress_label})..."))
             
             translated_path = translator.translate_srt(
                 self.current_subtitle_path, source_lang, target_lang,
@@ -599,6 +605,8 @@ class VidScalerApp:
         enabled = self.translate_enabled_var.get()
         self._toggle_translation_widgets(enabled)
         self._update_subtitle_button_state()  # Button-State nach Toggle aktualisieren
+        # Ensure the Whisper widgets are shown/hidden according to current method
+        self._on_method_change()
         
     def _toggle_translation_widgets(self, enabled: bool):
         """Aktiviert/deaktiviert Übersetzungs-Widgets"""
