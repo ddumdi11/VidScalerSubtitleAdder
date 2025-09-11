@@ -46,17 +46,27 @@ class VideoProcessor:
                                      capture_output=True, text=True, shell=False,
                                      timeout=FFMPEG_TIMEOUT_SHORT)
             if result.returncode == 0:
-                return result.stdout.strip().split('\n')[0]
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                # Handle Windows CR/LF properly - get first non-empty line
+                lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+                if lines:
+                    return lines[0]
+        except (subprocess.TimeoutExpired, OSError) as e:
             logging.warning(f"FFmpeg path detection failed: {e}")
             pass
             
         # Fallback: Standard-Pfade prüfen
-        common_paths = [
-            r'C:\ffmpeg\bin\ffmpeg.exe',
-            r'C:\Program Files\ffmpeg\bin\ffmpeg.exe',
-            r'C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe',
-        ]
+        if sys.platform == "win32":
+            common_paths = [
+                r'C:\ffmpeg\bin\ffmpeg.exe',
+                r'C:\Program Files\ffmpeg\bin\ffmpeg.exe',
+                r'C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe',
+            ]
+        else:
+            common_paths = [
+                '/opt/homebrew/bin/ffmpeg',   # macOS arm64 (Homebrew)
+                '/usr/local/bin/ffmpeg',      # macOS/intel or custom installs
+                '/usr/bin/ffmpeg',            # common Linux
+            ]
         
         for path in common_paths:
             if os.path.exists(path):
@@ -92,8 +102,8 @@ class VideoProcessor:
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Fehler beim Lesen der Video-Informationen: {e.stderr}")
         except subprocess.TimeoutExpired as e:
-            logging.error(f"ffprobe timeout after {FFMPEG_TIMEOUT_SHORT}s on file: {video_path}")
-            raise RuntimeError(f"Video-Analyse timeout nach {FFMPEG_TIMEOUT_SHORT}s - Datei möglicherweise beschädigt")
+            logging.exception(f"ffprobe timeout after {FFMPEG_TIMEOUT_SHORT}s on file: {video_path}", exc_info=True)
+            raise RuntimeError(f"Video-Analyse timeout nach {FFMPEG_TIMEOUT_SHORT}s - Datei möglicherweise beschädigt") from e
         except (ValueError, IndexError) as e:
             raise ValueError(f"Ungültige Video-Dimensionen: {e}")
     
@@ -122,6 +132,8 @@ class VideoProcessor:
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if e.stderr else str(e)
             raise RuntimeError(f"FFmpeg-Fehler: {error_msg}")
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"Video-Skalierung timeout nach {FFMPEG_TIMEOUT_LONG}s") from e
         except Exception as e:
             raise RuntimeError(f"Unerwarteter Fehler bei der Video-Skalierung: {e}")
     
