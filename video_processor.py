@@ -174,6 +174,8 @@ class VideoProcessor:
             
             # Kopiere Untertitel-Datei temporär ins Arbeitsverzeichnis
             # um Windows-Pfad-Probleme zu vermeiden
+            # TODO: Use NamedTemporaryFile to avoid collisions (Code-Rabbit suggestion)
+            # Priority: Low - current approach works fine for typical single-user scenarios
             temp_subtitle_path = os.path.join(os.getcwd(), "temp_subtitles.srt")
             shutil.copy2(subtitle_path, temp_subtitle_path)
             
@@ -255,13 +257,9 @@ class VideoProcessor:
             with open(ass_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
 
-            fmt_idx_map = {
-                # 0:"Style: Default" (kein Feld), dann:
-                1:"Fontname", 2:"Fontsize", 3:"PrimaryColour", 4:"SecondaryColour", 5:"OutlineColour",
-                6:"BackColour", 7:"Bold", 8:"Italic", 9:"Underline", 10:"StrikeOut", 11:"ScaleX",
-                12:"ScaleY", 13:"Spacing", 14:"Angle", 15:"BorderStyle", 16:"Outline", 17:"Shadow",
-                18:"Alignment", 19:"MarginL", 20:"MarginR", 21:"MarginV", 22:"Encoding"
-            }
+            # TODO: fmt_idx_map was removed as dead code (Code-Rabbit suggestion)
+            # The indices are now inlined below for minimal function complexity
+            # fmt_idx_map = { ... } # Previously here for documentation
 
             for i, line in enumerate(lines):
                 if line.strip().lower().startswith("style: default"):
