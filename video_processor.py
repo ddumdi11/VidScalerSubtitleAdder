@@ -80,7 +80,8 @@ class VideoProcessor:
             # ffprobe verwenden für genauere Informationen
             ffprobe_path = shutil.which('ffprobe') or 'ffprobe'
             cmd = [
-                os.path.abspath(ffprobe_path),
+                ffprobe_path,  # Keep unmodified for PATH resolution
+                '-hide_banner', '-loglevel', 'quiet',
                 '-v', 'error',
                 '-select_streams', 'v:0',
                 '-show_entries', 'stream=width,height',
@@ -183,8 +184,9 @@ class VideoProcessor:
             # Kopiere Untertitel-Datei temporär ins Arbeitsverzeichnis
             # um Windows-Pfad-Probleme zu vermeiden
             with tempfile.NamedTemporaryFile(dir=os.getcwd(), prefix="temp_subtitles_", suffix=".srt", delete=False) as tf:
-                temp_subtitle_path = os.path.basename(tf.name)  # keep basename for subtitles= filter
-            shutil.copy2(subtitle_path, os.path.join(os.getcwd(), temp_subtitle_path))
+                temp_subtitle_abs = tf.name
+                temp_subtitle_path = os.path.basename(tf.name)  # for subtitles= filter
+            shutil.copy2(subtitle_path, temp_subtitle_abs)
             
             # FFmpeg-Befehl: Video erweitern und Untertitel einbrennen
             # Verwende einfachen relativen Pfad
@@ -206,14 +208,14 @@ class VideoProcessor:
                 
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if e.stderr else str(e)
-            raise RuntimeError(f"FFmpeg-Fehler bei Untertitel-Verarbeitung: {error_msg}")
+            raise RuntimeError(f"FFmpeg-Fehler bei Untertitel-Verarbeitung: {error_msg}") from e
         except Exception as e:
-            raise RuntimeError(f"Unerwarteter Fehler bei der Untertitel-Verarbeitung: {e}")
+            raise RuntimeError("Unerwarteter Fehler bei der Untertitel-Verarbeitung") from e
         finally:
             # Temporäre Untertitel-Datei aufräumen
-            if temp_subtitle_path and os.path.exists(temp_subtitle_path):
+            if 'temp_subtitle_abs' in locals() and os.path.exists(temp_subtitle_abs):
                 try:
-                    os.remove(temp_subtitle_path)
+                    os.remove(temp_subtitle_abs)
                 except OSError as e:
                     logging.debug("Failed to cleanup temp file %s: %s", temp_subtitle_path, e)
                     pass  # Ignoriere Fehler beim Aufräumen
@@ -323,7 +325,7 @@ class VideoProcessor:
                     f"ass=filename={os.path.basename(temp_translated_ass)}"
                 )
 
-                cmd = [self.ffmpeg_path, "-nostdin", "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
+                cmd = [self.ffmpeg_path, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
 
             else:
                 # Nur Übersetzung unten
@@ -342,7 +344,7 @@ class VideoProcessor:
                     f"ass=filename={os.path.basename(temp_translated_ass)}"
                 )
 
-                cmd = [self.ffmpeg_path, "-nostdin", "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
+                cmd = [self.ffmpeg_path, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
 
             # Ausführen (hardened with timeout)
             subprocess.run(cmd, capture_output=True, text=True, shell=False, 
@@ -352,9 +354,9 @@ class VideoProcessor:
                 raise RuntimeError("Ausgabedatei wurde nicht erstellt")
 
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"FFmpeg-Fehler bei Übersetzungs-Verarbeitung: {e.stderr or str(e)}")
+            raise RuntimeError(f"FFmpeg-Fehler bei Übersetzungs-Verarbeitung: {e.stderr or str(e)}") from e
         except Exception as e:
-            raise RuntimeError(f"Unerwarteter Fehler bei der Übersetzungs-Verarbeitung: {e}")
+            raise RuntimeError("Unerwarteter Fehler bei der Übersetzungs-Verarbeitung") from e
         finally:
             # Aufräumen
             for p in [temp_original_srt, temp_translated_srt, temp_original_ass, temp_translated_ass]:
