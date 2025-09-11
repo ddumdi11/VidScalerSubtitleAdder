@@ -130,6 +130,8 @@ class VideoProcessor:
                 self.ffmpeg_path, '-nostdin', '-hide_banner', '-loglevel', 'error',
                 '-i', input_path,
                 '-vf', f'scale={new_width}:-2',
+                # insert faststart for MP4/MOV containers
+                *(['-movflags', '+faststart'] if output_path.lower().endswith(('.mp4', '.m4v', '.mov')) else []),
                 '-y',
                 output_path
             ]
@@ -154,7 +156,7 @@ class VideoProcessor:
     def is_ffmpeg_available(self) -> bool:
         """Prüft, ob FFmpeg verfügbar ist"""
         try:
-            subprocess.run([self.ffmpeg_path, '-nostdin', '-version'], 
+            subprocess.run([self.ffmpeg_path, '-nostdin', '-hide_banner', '-loglevel', 'error', '-version'], 
                          capture_output=True, shell=False, timeout=FFMPEG_TIMEOUT_SHORT, 
                          check=True, **SUBPROCESS_FLAGS)
             return True
@@ -165,7 +167,7 @@ class VideoProcessor:
     def get_ffmpeg_version(self) -> str:
         """Gibt FFmpeg-Version zurück"""
         try:
-            result = subprocess.run([self.ffmpeg_path, '-nostdin', '-version'], 
+            result = subprocess.run([self.ffmpeg_path, '-nostdin', '-hide_banner', '-loglevel', 'error', '-version'], 
                                  capture_output=True, text=True, shell=False, 
                                  timeout=FFMPEG_TIMEOUT_SHORT, check=True, **SUBPROCESS_FLAGS)
             # Erste Zeile enthält Version
@@ -233,7 +235,7 @@ class VideoProcessor:
 
         def _convert_srt_to_ass(src_srt: str, dst_ass: str):
             # SRT -> ASS (UTF-8 erzwingen) - hardened subprocess call
-            subprocess.run([self.ffmpeg_path, "-nostdin", "-loglevel", "error", "-y", "-sub_charenc", "UTF-8", "-i", src_srt, dst_ass],
+            subprocess.run([self.ffmpeg_path, "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-sub_charenc", "UTF-8", "-i", src_srt, dst_ass],
                 capture_output=True, text=True, shell=False, timeout=FFMPEG_TIMEOUT_SHORT, 
                 check=True, **SUBPROCESS_FLAGS)
 
