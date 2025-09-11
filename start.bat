@@ -38,11 +38,22 @@ REM ========================================
 echo Starte VidScalerSubtitleAdder GUI...
 python vidscaler.py
 
-REM ========================================
+REM Check exit code immediately after python command
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo FEHLER: GUI wurde mit Exit-Code %ERRORLEVEL% beendet!
+    echo Mögliche Ursachen: Python-Fehler, fehlende Dependencies, etc.
+    echo Bitte prüfe die obigen Fehlermeldungen.
+    echo.
+    echo Druecke eine beliebige Taste um die Konsole zu schließen...
+    pause >nul
+) else (
+    echo.
+    echo GUI wurde normal geschlossen. Konsole schließt automatisch in 3 Sekunden...
+    timeout /t 3 >nul
+)
 
-echo.
-echo GUI wurde geschlossen. Konsole schließt automatisch in 3 Sekunden...
-timeout /t 3 >nul
+REM ========================================
 
 REM Virtual Environment wird automatisch deaktiviert wenn die Konsole geschlossen wird
 REM Kein explizites "deactivate" nötig!
