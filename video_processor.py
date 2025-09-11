@@ -56,11 +56,10 @@ class VideoProcessor:
             r'C:\ffmpeg\bin\ffmpeg.exe',
             r'C:\Program Files\ffmpeg\bin\ffmpeg.exe',
             r'C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe',
-            'ffmpeg'  # Hoffen, dass es im PATH ist
         ]
         
         for path in common_paths:
-            if os.path.exists(path) or path == 'ffmpeg':
+            if os.path.exists(path):
                 return path
                 
         raise FileNotFoundError("FFmpeg wurde nicht gefunden. Bitte installieren Sie FFmpeg und stellen Sie sicher, dass es im PATH verfügbar ist.")
@@ -105,18 +104,16 @@ class VideoProcessor:
             if new_width % 2 != 0:
                 new_width += 1
             
-            # Erste Versuch: Wie dein ursprünglicher Befehl
             cmd = [
                 self.ffmpeg_path, '-nostdin',
                 '-i', input_path,
-                '-vf', f'scale={new_width}:-1',  # -1 für proportionale Höhe (wie ursprünglich)
-                '-y',  # Überschreibe Ausgabedatei ohne Nachfrage
+                '-vf', f'scale={new_width}:-2',
+                '-y',
                 output_path
             ]
             
-            # Führe FFmpeg-Befehl aus (hardened with timeout)
-            result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
-                                  timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
+            subprocess.run(cmd, capture_output=True, text=True, shell=False,
+                           timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
             
             # Prüfe, ob Ausgabedatei erstellt wurde
             if not os.path.exists(output_path):
@@ -124,30 +121,7 @@ class VideoProcessor:
                 
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if e.stderr else str(e)
-            
-            # Prüfe auf "height not divisible by 2" Fehler und versuche Fallback
-            if "height not divisible by 2" in error_msg.lower():
-                try:
-                    # Fallback: Verwende -2 für gerade Höhe (wie du es manuell machst)
-                    fallback_cmd = [
-                        self.ffmpeg_path, '-nostdin',
-                        '-i', input_path,
-                        '-vf', f'scale={new_width}:-2',  # -2 erzwingt gerade Höhe
-                        '-y',
-                        output_path
-                    ]
-                    subprocess.run(fallback_cmd, capture_output=True, text=True, shell=False,
-                                 timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
-                    
-                    # Prüfe, ob Ausgabedatei erstellt wurde
-                    if not os.path.exists(output_path):
-                        raise RuntimeError("Ausgabedatei wurde nicht erstellt")
-                        
-                except subprocess.CalledProcessError:
-                    # Wenn auch der Fallback fehlschlägt, ursprünglichen Fehler anzeigen
-                    raise RuntimeError(f"FFmpeg-Fehler: {error_msg}")
-            else:
-                raise RuntimeError(f"FFmpeg-Fehler: {error_msg}")
+            raise RuntimeError(f"FFmpeg-Fehler: {error_msg}")
         except Exception as e:
             raise RuntimeError(f"Unerwarteter Fehler bei der Video-Skalierung: {e}")
     
@@ -158,8 +132,8 @@ class VideoProcessor:
                          capture_output=True, shell=False, timeout=FFMPEG_TIMEOUT_SHORT, 
                          check=True, **SUBPROCESS_FLAGS)
             return True
-        except Exception as e:
-            logging.exception(f"FFmpeg availability check failed: {e}")
+        except Exception:
+            logging.exception("FFmpeg availability check failed")
             return False
     
     def get_ffmpeg_version(self) -> str:
@@ -171,8 +145,8 @@ class VideoProcessor:
             # Erste Zeile enthält Version
             first_line = result.stdout.split('\n')[0]
             return first_line
-        except Exception as e:
-            logging.exception(f"FFmpeg version check failed: {e}")
+        except Exception:
+            logging.exception("FFmpeg version check failed")
             return "Unbekannt"
             
     def scale_video_with_subtitles(self, input_path: str, output_path: str, new_width: int, subtitle_path: str):
@@ -202,8 +176,8 @@ class VideoProcessor:
             ]
             
             # Führe FFmpeg-Befehl aus (hardened with timeout)
-            result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
-                                  timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
+            subprocess.run(cmd, capture_output=True, text=True, shell=False,
+                           timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
             
             # Prüfe, ob Ausgabedatei erstellt wurde
             if not os.path.exists(output_path):
@@ -332,7 +306,7 @@ class VideoProcessor:
                     f"ass=filename={os.path.basename(temp_translated_ass)}"
                 )
 
-                cmd = [self.ffmpeg_path, "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
+                cmd = [self.ffmpeg_path, "-nostdin", "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
 
             else:
                 # Nur Übersetzung unten
