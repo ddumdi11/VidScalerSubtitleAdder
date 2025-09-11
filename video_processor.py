@@ -128,13 +128,9 @@ class VideoProcessor:
                 os.path.abspath(output_path)
             ]
             
-            try:
-                result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
-                               timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
-                logging.info(f"Video scaling completed: {output_path}")
-            except subprocess.CalledProcessError as e:
-                logging.error(f"FFmpeg scaling failed: {e.stderr}")
-                raise RuntimeError(f"Video-Skalierung fehlgeschlagen: {e.stderr}") from e
+            subprocess.run(cmd, capture_output=True, text=True, shell=False,
+                          timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
+            logging.info(f"Video scaling completed: {output_path}")
             
             # Prüfe, ob Ausgabedatei erstellt wurde
             if not os.path.exists(output_path):
@@ -142,11 +138,12 @@ class VideoProcessor:
                 
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if e.stderr else str(e)
-            raise RuntimeError(f"FFmpeg-Fehler: {error_msg}")
+            raise RuntimeError(f"FFmpeg-Fehler: {error_msg}") from e
         except subprocess.TimeoutExpired as e:
             raise RuntimeError(f"Video-Skalierung timeout nach {FFMPEG_TIMEOUT_LONG}s") from e
         except Exception as e:
-            raise RuntimeError(f"Unerwarteter Fehler bei der Video-Skalierung: {e}")
+            logging.exception("Unexpected error during video scaling")
+            raise RuntimeError("Unerwarteter Fehler bei der Video-Skalierung") from e
     
     def is_ffmpeg_available(self) -> bool:
         """Prüft, ob FFmpeg verfügbar ist"""

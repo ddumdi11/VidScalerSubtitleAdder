@@ -114,7 +114,8 @@ VidScaler/
 
 ## Installation (Alle Dependencies)
 ```bash
-pip install openai-whisper matplotlib pydub translators smart-srt-translator
+pip install openai-whisper matplotlib pydub translators
+pip install --index-url https://test.pypi.org/simple/ smart-srt-translator
 ```
 
 ## 🎉 Phase 3 Features (Übersetzung) - ✅ PRODUKTIONSREIF!
@@ -225,7 +226,7 @@ def _map_whisper_to_original_timing(whisper_segments, original_segments):
 
 ## 🏗️ Translation Architecture (Analysis by Code-Rabbit)
 
-**Note: Architecture analysis and sequence diagram provided by Code-Rabbit AI Code Review**
+### Note: Architecture analysis and sequence diagram provided by Code-Rabbit AI Code Review
 
 ```mermaid
 sequenceDiagram
