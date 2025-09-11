@@ -28,7 +28,11 @@ class VideoProcessor:
         
     def _find_ffmpeg(self) -> str:
         """Findet FFmpeg-Pfad im System (secure, no shell injection)"""
-        # First try: Use shutil.which (cross-platform, secure)
+        # 0) Explicit override
+        ffmpeg_env = os.getenv("FFMPEG_PATH")
+        if ffmpeg_env and os.path.exists(ffmpeg_env):
+            return ffmpeg_env
+        # 1) First try: Use shutil.which (cross-platform, secure)
         ffmpeg_path = shutil.which('ffmpeg')
         if ffmpeg_path:
             return ffmpeg_path
@@ -44,7 +48,7 @@ class VideoProcessor:
                 # Unix-like: use 'which' command securely  
                 result = subprocess.run(['which', 'ffmpeg'],
                                      capture_output=True, text=True, shell=False,
-                                     timeout=FFMPEG_TIMEOUT_SHORT)
+                                     timeout=FFMPEG_TIMEOUT_SHORT, **SUBPROCESS_FLAGS)
             if result.returncode == 0:
                 # Handle Windows CR/LF properly - get first non-empty line
                 lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
@@ -60,6 +64,7 @@ class VideoProcessor:
                 r'C:\ffmpeg\bin\ffmpeg.exe',
                 r'C:\Program Files\ffmpeg\bin\ffmpeg.exe',
                 r'C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe',
+                r'C:\ProgramData\chocolatey\bin\ffmpeg.exe',
             ]
         else:
             common_paths = [
@@ -72,7 +77,7 @@ class VideoProcessor:
             if os.path.exists(path):
                 return path
                 
-        raise FileNotFoundError("FFmpeg wurde nicht gefunden. Bitte installieren Sie FFmpeg und stellen Sie sicher, dass es im PATH verfügbar ist.")
+        raise FileNotFoundError("FFmpeg wurde nicht gefunden. Bitte installieren Sie FFmpeg, stellen Sie sicher, dass es im PATH verfügbar ist, oder setzen Sie FFMPEG_PATH auf den absoluten ffmpeg-Pfad.")
     
     def get_video_dimensions(self, video_path: str) -> Tuple[int, int]:
         """Ermittelt Video-Dimensionen mit ffprobe"""
