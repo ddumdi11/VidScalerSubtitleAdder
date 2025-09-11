@@ -9,6 +9,7 @@ import sys
 import shutil
 import tempfile
 import logging
+import re
 from typing import Tuple
 
 # FFmpeg timeout constants (in seconds)
@@ -200,7 +201,7 @@ class VideoProcessor:
             cmd = [
                 self.ffmpeg_path, '-nostdin', '-hide_banner', '-loglevel', 'error',
                 '-i', input_path,
-                '-vf', f'scale={new_width}:-2,pad=iw:ih+{subtitle_padding}:0:0:black,subtitles={temp_subtitle_basename}',
+                '-vf', f'scale={new_width}:-2,pad=iw:ih+{subtitle_padding}:0:0:black,subtitles={temp_subtitle_basename}:charenc=UTF-8',
                 '-y',  # Überschreibe Ausgabedatei ohne Nachfrage
                 output_path
             ]
@@ -367,9 +368,11 @@ class VideoProcessor:
             # Aufräumen
             for p in [temp_original_srt, temp_translated_srt, temp_original_ass, temp_translated_ass]:
                 if p and os.path.exists(p):
-                    try: os.remove(p)
-                    except OSError: 
-                        pass  # Ignore cleanup errors
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        # Ignore cleanup errors
+                        pass
 
     
     def _parse_srt(self, srt_path: str):
@@ -380,7 +383,6 @@ class VideoProcessor:
             content = f.read().strip()
             
         # SRT-Blöcke splitten (durch doppelte Zeilenumbrüche getrennt)
-        import re
         blocks = re.split(r'\r?\n\r?\n', content)
         
         for block in blocks:
