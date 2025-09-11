@@ -5,11 +5,18 @@ Audio Transcriber - GUI-Anwendung für Video-zu-SRT Transkription mit Whisper
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
+import sys
 import tempfile
 import threading
 from typing import List, Dict, Optional, Callable
 import subprocess
 import json
+
+# Windows-spezifische subprocess-Konfiguration um Console-Fenster zu unterdrücken
+if sys.platform == "win32":
+    SUBPROCESS_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW}
+else:
+    SUBPROCESS_FLAGS = {}
 
 try:
     import whisper
@@ -201,7 +208,7 @@ class AudioTranscriber:
                 self.temp_audio_path
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, **SUBPROCESS_FLAGS)
             
             if result.returncode != 0:
                 raise Exception(f"FFmpeg Fehler: {result.stderr}")

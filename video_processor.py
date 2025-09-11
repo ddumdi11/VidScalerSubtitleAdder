@@ -5,10 +5,17 @@ Video-Verarbeitung mit FFmpeg
 
 import subprocess
 import os
+import sys
 from typing import Tuple
 import shlex
 import shutil
 import tempfile
+
+# Windows-spezifische subprocess-Konfiguration um Console-Fenster zu unterdrücken
+if sys.platform == "win32":
+    SUBPROCESS_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW}
+else:
+    SUBPROCESS_FLAGS = {}
 
 
 class VideoProcessor:
@@ -20,7 +27,7 @@ class VideoProcessor:
         # Versuche ffmpeg im PATH zu finden
         try:
             result = subprocess.run(['where', 'ffmpeg'], 
-                                 capture_output=True, text=True, shell=True)
+                                 capture_output=True, text=True, shell=True, **SUBPROCESS_FLAGS)
             if result.returncode == 0:
                 return result.stdout.strip().split('\n')[0]
         except:
@@ -53,7 +60,7 @@ class VideoProcessor:
                 video_path
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
             dimensions = result.stdout.strip().split('x')
             
             if len(dimensions) != 2:
@@ -86,7 +93,7 @@ class VideoProcessor:
             ]
             
             # Führe FFmpeg-Befehl aus
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
             
             # Prüfe, ob Ausgabedatei erstellt wurde
             if not os.path.exists(output_path):
@@ -106,7 +113,7 @@ class VideoProcessor:
                         '-y',
                         output_path
                     ]
-                    subprocess.run(fallback_cmd, capture_output=True, text=True, check=True)
+                    subprocess.run(fallback_cmd, capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
                     
                     # Prüfe, ob Ausgabedatei erstellt wurde
                     if not os.path.exists(output_path):
@@ -124,7 +131,7 @@ class VideoProcessor:
         """Prüft, ob FFmpeg verfügbar ist"""
         try:
             subprocess.run([self.ffmpeg_path, '-version'], 
-                         capture_output=True, check=True)
+                         capture_output=True, check=True, **SUBPROCESS_FLAGS)
             return True
         except:
             return False
@@ -133,7 +140,7 @@ class VideoProcessor:
         """Gibt FFmpeg-Version zurück"""
         try:
             result = subprocess.run([self.ffmpeg_path, '-version'], 
-                                 capture_output=True, text=True, check=True)
+                                 capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
             # Erste Zeile enthält Version
             first_line = result.stdout.split('\n')[0]
             return first_line
@@ -167,7 +174,7 @@ class VideoProcessor:
             ]
             
             # Führe FFmpeg-Befehl aus
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
             
             # Prüfe, ob Ausgabedatei erstellt wurde
             if not os.path.exists(output_path):
@@ -195,10 +202,8 @@ class VideoProcessor:
 
         def _convert_srt_to_ass(src_srt: str, dst_ass: str):
             # SRT -> ASS (UTF-8 erzwingen)
-            subprocess.run(
-                [self.ffmpeg_path, "-loglevel", "error", "-y", "-sub_charenc", "UTF-8", "-i", src_srt, dst_ass],
-                capture_output=True, text=True, check=True
-            )
+            subprocess.run([self.ffmpeg_path, "-loglevel", "error", "-y", "-sub_charenc", "UTF-8", "-i", src_srt, dst_ass],
+                capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
 
         def _ensure_wrapstyle(ass_path: str, wrap_style: int = 3):
             # 0/3 = “smart” (3 bevorzugt meist gleichmäßiger),
@@ -318,7 +323,7 @@ class VideoProcessor:
                 cmd = [self.ffmpeg_path, "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
 
             # Ausführen
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
 
             if not os.path.exists(output_path):
                 raise RuntimeError("Ausgabedatei wurde nicht erstellt")

@@ -41,12 +41,8 @@ python vidscaler.py
 REM ========================================
 
 echo.
-echo Programm beendet.
-echo Virtual Environment ist noch aktiv.
-echo.
-echo Druecke eine beliebige Taste zum Beenden...
-echo (Das Virtual Environment wird automatisch deaktiviert)
-pause >nul
+echo GUI wurde geschlossen. Konsole schließt automatisch in 3 Sekunden...
+timeout /t 3 >nul
 
 REM Virtual Environment wird automatisch deaktiviert wenn die Konsole geschlossen wird
 REM Kein explizites "deactivate" nötig!

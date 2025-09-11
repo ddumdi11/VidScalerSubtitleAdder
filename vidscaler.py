@@ -502,7 +502,7 @@ class VidScalerApp:
                 method = "whisper"
                 whisper_model = self.whisper_model_var.get().split()[0]  # "base (empfohlen)" -> "base"
             elif method_text == "OpenAI (beste Qualität)":
-                method = "openai"
+                method = "auto"  # Use auto to trigger OpenAI with fallback
                 whisper_model = "base"
             else:  # "Google Translate (schnell)"
                 method = "google"
