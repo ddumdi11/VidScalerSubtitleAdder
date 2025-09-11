@@ -56,7 +56,7 @@ class VideoProcessor:
         try:
             # ffprobe verwenden für genauere Informationen
             cmd = [
-                'ffprobe', '-nostdin',
+                'ffprobe', 
                 '-v', 'error',
                 '-select_streams', 'v:0',
                 '-show_entries', 'stream=width,height',
@@ -64,8 +64,7 @@ class VideoProcessor:
                 video_path
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
-                                  timeout=FFMPEG_TIMEOUT_SHORT, check=True, **SUBPROCESS_FLAGS)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
             dimensions = result.stdout.strip().split('x')
             
             if len(dimensions) != 2:
