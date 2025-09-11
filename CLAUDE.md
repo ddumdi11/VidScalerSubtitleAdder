@@ -144,7 +144,7 @@ pip install openai-whisper matplotlib pydub translators smart-srt-translator
 
 ## 🎉 Phase 5 Features (Production Quality & UX) - ✅ FERTIG!
 - **✅ Smart-SRT-Translator Integration**: Lokales `smart_translation.py` durch PyPI-Modul ersetzt
-- **✅ Optimierte GUI-Defaults**: Fenstergröße, Audio-Transkription (Small+English), Übersetzung (OpenAI+EN-Source)
+- **✅ Optimierte GUI-Defaults**: Fenstergröße, Audio-Transkription (Base+English), Übersetzung (OpenAI+EN-Source)
 - **✅ Benutzerfreundlichkeit**: Alle Standard-Einstellungen auf häufigste Use-Cases optimiert
 - **✅ Modular Architecture**: Externe Dependencies über offizielle Package-Manager
 

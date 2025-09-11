@@ -91,7 +91,7 @@ class AudioTranscriber:
         model_frame = ttk.LabelFrame(main_frame, text="Whisper Modell", padding="5")
         model_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        self.model_var = tk.StringVar(value="small")
+        self.model_var = tk.StringVar(value="base")
         models = [("Tiny (schnell, weniger genau)", "tiny"), 
                   ("Base (empfohlen)", "base"),
                   ("Small (langsamer, genauer)", "small")]
