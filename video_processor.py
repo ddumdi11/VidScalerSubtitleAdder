@@ -78,17 +78,22 @@ class VideoProcessor:
         """Ermittelt Video-Dimensionen mit ffprobe"""
         try:
             # ffprobe verwenden für genauere Informationen
+            ffprobe_path = shutil.which('ffprobe') or 'ffprobe'
             cmd = [
-                'ffprobe', 
+                os.path.abspath(ffprobe_path), '-nostdin',
                 '-v', 'error',
                 '-select_streams', 'v:0',
                 '-show_entries', 'stream=width,height',
                 '-of', 'csv=s=x:p=0',
-                video_path
+                os.path.abspath(video_path)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
-                                  timeout=FFMPEG_TIMEOUT_SHORT, check=True, **SUBPROCESS_FLAGS)
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
+                                      timeout=FFMPEG_TIMEOUT_SHORT, check=True, **SUBPROCESS_FLAGS)
+            except subprocess.CalledProcessError as e:
+                logging.error(f"FFprobe failed: {e.stderr}")
+                raise RuntimeError(f"Video-Analyse fehlgeschlagen: {e.stderr}") from e
             dimensions = result.stdout.strip().split('x')
             
             if len(dimensions) != 2:
@@ -115,15 +120,20 @@ class VideoProcessor:
                 new_width += 1
             
             cmd = [
-                self.ffmpeg_path, '-nostdin',
-                '-i', input_path,
+                os.path.abspath(self.ffmpeg_path), '-nostdin',
+                '-i', os.path.abspath(input_path),
                 '-vf', f'scale={new_width}:-2',
                 '-y',
-                output_path
+                os.path.abspath(output_path)
             ]
             
-            subprocess.run(cmd, capture_output=True, text=True, shell=False,
-                           timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
+                               timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
+                logging.info(f"Video scaling completed: {output_path}")
+            except subprocess.CalledProcessError as e:
+                logging.error(f"FFmpeg scaling failed: {e.stderr}")
+                raise RuntimeError(f"Video-Skalierung fehlgeschlagen: {e.stderr}") from e
             
             # Prüfe, ob Ausgabedatei erstellt wurde
             if not os.path.exists(output_path):

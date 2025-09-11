@@ -222,3 +222,44 @@ def _map_whisper_to_original_timing(whisper_segments, original_segments):
 - **Dynamic Widgets**: Whisper-Model-Dropdown erscheint nur bei Whisper-Auswahl
 - **Dependency-Check**: Automatische Erkennung ob Whisper/Translators verfügbar
 - **Smart State-Management**: Widget-States abhängig von Methoden-Auswahl
+
+## 🏗️ Translation Architecture (Analysis by Code-Rabbit)
+
+**Note: Architecture analysis and sequence diagram provided by Code-Rabbit AI Code Review**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant GUI as VidScaler GUI
+    participant Translator as translator.py
+    participant SmartSRT as smart-srt-translator
+    participant OpenAI as OpenAI API
+    participant FFmpeg as FFmpeg
+
+    User->>GUI: Select translation options
+    GUI->>Translator: translate_srt(srt_path, source_lang, target_lang, method)
+    
+    alt method == "openai"
+        Translator->>SmartSRT: load_env_vars()
+        SmartSRT-->>Translator: Environment loaded
+        Translator->>SmartSRT: OpenAITranslator()
+        SmartSRT-->>Translator: Translator instance
+        Translator->>SmartSRT: translate(source_lang, target_lang, srt_path)
+        SmartSRT->>OpenAI: API request
+        OpenAI-->>SmartSRT: Translated content
+        SmartSRT-->>Translator: Translated SRT
+    else method == "google"
+        Translator->>Translator: _translate_via_google(srt_path, target_lang)
+        Translator-->>Translator: Translated SRT
+    else method == "whisper"
+        Translator->>Translator: translate_via_whisper(video_path, srt_path, target_lang, model)
+        Translator-->>Translator: Translated SRT
+    end
+    
+    Translator-->>GUI: Translation complete
+    GUI->>FFmpeg: Process video with translated subtitles
+    FFmpeg-->>GUI: Video with subtitles ready
+    GUI-->>User: Processing complete
+```
+
+This sequence diagram illustrates the translation workflow, showing how the application integrates multiple translation methods through a unified interface. The OpenAI translation path demonstrates proper provider initialization through the smart-srt-translator package, while fallback methods (Google Translate, Whisper) provide alternative translation options.
