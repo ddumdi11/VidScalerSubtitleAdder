@@ -12,8 +12,8 @@ import logging
 from typing import Tuple
 
 # FFmpeg timeout constants (in seconds)
-FFMPEG_TIMEOUT_SHORT = 30    # For quick operations (version check, etc.)
-FFMPEG_TIMEOUT_LONG = 600    # For video processing (10 minutes)
+FFMPEG_TIMEOUT_SHORT = int(os.getenv("FFMPEG_TIMEOUT_SHORT", "30"))     # quick ops
+FFMPEG_TIMEOUT_LONG = int(os.getenv("FFMPEG_TIMEOUT_LONG", "600"))      # processing
 
 # Windows-spezifische subprocess-Konfiguration um Console-Fenster zu unterdrücken
 if sys.platform == "win32":
@@ -184,17 +184,16 @@ class VideoProcessor:
             
             # Kopiere Untertitel-Datei temporär ins Arbeitsverzeichnis
             # um Windows-Pfad-Probleme zu vermeiden
-            # TODO: Use NamedTemporaryFile to avoid collisions (Code-Rabbit suggestion)
-            # Priority: Low - current approach works fine for typical single-user scenarios
-            temp_subtitle_path = os.path.join(os.getcwd(), "temp_subtitles.srt")
-            shutil.copy2(subtitle_path, temp_subtitle_path)
+            with tempfile.NamedTemporaryFile(dir=os.getcwd(), prefix="temp_subtitles_", suffix=".srt", delete=False) as tf:
+                temp_subtitle_path = os.path.basename(tf.name)  # keep basename for subtitles= filter
+            shutil.copy2(subtitle_path, os.path.join(os.getcwd(), temp_subtitle_path))
             
             # FFmpeg-Befehl: Video erweitern und Untertitel einbrennen
             # Verwende einfachen relativen Pfad
             cmd = [
-                self.ffmpeg_path, '-nostdin',
+                self.ffmpeg_path, '-nostdin', '-hide_banner', '-loglevel', 'error',
                 '-i', input_path,
-                '-vf', f'scale={new_width}:-2,pad=iw:ih+{subtitle_padding}:0:0:black,subtitles=temp_subtitles.srt',
+                '-vf', f'scale={new_width}:-2,pad=iw:ih+{subtitle_padding}:0:0:black,subtitles={temp_subtitle_path}',
                 '-y',  # Überschreibe Ausgabedatei ohne Nachfrage
                 output_path
             ]
@@ -218,7 +217,7 @@ class VideoProcessor:
                 try:
                     os.remove(temp_subtitle_path)
                 except OSError as e:
-                    logging.debug(f"Failed to cleanup temp file {temp_subtitle_path}: {e}")
+                    logging.debug("Failed to cleanup temp file %s: %s", temp_subtitle_path, e)
                     pass  # Ignoriere Fehler beim Aufräumen
                     
     def scale_video_with_translation(self, input_path: str, output_path: str, new_width: int, 
@@ -375,13 +374,14 @@ class VideoProcessor:
             content = f.read().strip()
             
         # SRT-Blöcke splitten (durch doppelte Zeilenumbrüche getrennt)
-        blocks = content.split('\n\n')
+        import re
+        blocks = re.split(r'\r?\n\r?\n', content)
         
         for block in blocks:
             if not block.strip():
                 continue
                 
-            lines = block.strip().split('\n')
+            lines = block.strip().splitlines()
             if len(lines) < 3:
                 continue
                 
