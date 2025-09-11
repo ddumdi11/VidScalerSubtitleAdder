@@ -97,15 +97,16 @@ class VideoProcessor:
                 result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
                                       timeout=FFMPEG_TIMEOUT_SHORT, check=True, **SUBPROCESS_FLAGS)
             except subprocess.CalledProcessError as e:
-                logging.exception(f"FFprobe failed: {e.stderr}")
-                raise RuntimeError(f"Video-Analyse fehlgeschlagen: {e.stderr}") from e
+                err = e.stderr or e.stdout or str(e)
+                logging.exception("FFprobe failed: %s", err)
+                raise RuntimeError(f"Video-Analyse fehlgeschlagen: {err}") from e
             dimensions = result.stdout.strip().split('x')
-            
             if len(dimensions) != 2:
                 raise ValueError("Konnte Video-Dimensionen nicht ermitteln")
-                
             width = int(dimensions[0])
             height = int(dimensions[1])
+            if width <= 0 or height <= 0:
+                raise ValueError(f"Ungültige Dimensionen: {width}x{height}")
             
             return width, height
             
