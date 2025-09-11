@@ -81,8 +81,7 @@ class VideoProcessor:
             ffprobe_path = shutil.which('ffprobe') or 'ffprobe'
             cmd = [
                 ffprobe_path,  # Keep unmodified for PATH resolution
-                '-hide_banner', '-loglevel', 'quiet',
-                '-v', 'error',
+                '-hide_banner', '-loglevel', 'error',
                 '-select_streams', 'v:0',
                 '-show_entries', 'stream=width,height',
                 '-of', 'csv=s=x:p=0',
@@ -122,7 +121,7 @@ class VideoProcessor:
                 new_width += 1
             
             cmd = [
-                self.ffmpeg_path, '-nostdin',
+                self.ffmpeg_path, '-nostdin', '-hide_banner', '-loglevel', 'error',
                 '-i', input_path,
                 '-vf', f'scale={new_width}:-2',
                 '-y',
@@ -172,7 +171,7 @@ class VideoProcessor:
             
     def scale_video_with_subtitles(self, input_path: str, output_path: str, new_width: int, subtitle_path: str):
         """Skaliert Video und brennt Untertitel unterhalb des Videos ein"""
-        temp_subtitle_path = None
+        temp_subtitle_abs = None
         try:
             # Stelle sicher, dass new_width gerade ist
             if new_width % 2 != 0:
@@ -185,7 +184,7 @@ class VideoProcessor:
             # um Windows-Pfad-Probleme zu vermeiden
             with tempfile.NamedTemporaryFile(dir=os.getcwd(), prefix="temp_subtitles_", suffix=".srt", delete=False) as tf:
                 temp_subtitle_abs = tf.name
-                temp_subtitle_path = os.path.basename(tf.name)  # for subtitles= filter
+                temp_subtitle_basename = os.path.basename(tf.name)  # for subtitles= filter
             shutil.copy2(subtitle_path, temp_subtitle_abs)
             
             # FFmpeg-Befehl: Video erweitern und Untertitel einbrennen
@@ -193,7 +192,7 @@ class VideoProcessor:
             cmd = [
                 self.ffmpeg_path, '-nostdin', '-hide_banner', '-loglevel', 'error',
                 '-i', input_path,
-                '-vf', f'scale={new_width}:-2,pad=iw:ih+{subtitle_padding}:0:0:black,subtitles={temp_subtitle_path}',
+                '-vf', f'scale={new_width}:-2,pad=iw:ih+{subtitle_padding}:0:0:black,subtitles={temp_subtitle_basename}',
                 '-y',  # Überschreibe Ausgabedatei ohne Nachfrage
                 output_path
             ]
@@ -213,11 +212,11 @@ class VideoProcessor:
             raise RuntimeError("Unerwarteter Fehler bei der Untertitel-Verarbeitung") from e
         finally:
             # Temporäre Untertitel-Datei aufräumen
-            if temp_subtitle_path and os.path.exists(temp_subtitle_abs):
+            if temp_subtitle_abs and os.path.exists(temp_subtitle_abs):
                 try:
                     os.remove(temp_subtitle_abs)
                 except OSError as e:
-                    logging.debug("Failed to cleanup temp file %s: %s", temp_subtitle_path, e)
+                    logging.debug("Failed to cleanup temp file %s: %s", temp_subtitle_abs, e)
                     
     def scale_video_with_translation(self, input_path: str, output_path: str, new_width: int, 
                                  original_subtitle_path: str, translated_subtitle_path: str,
