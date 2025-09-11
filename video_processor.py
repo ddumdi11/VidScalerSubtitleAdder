@@ -92,7 +92,7 @@ class VideoProcessor:
                 result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
                                       timeout=FFMPEG_TIMEOUT_SHORT, check=True, **SUBPROCESS_FLAGS)
             except subprocess.CalledProcessError as e:
-                logging.error(f"FFprobe failed: {e.stderr}")
+                logging.error(f"FFprobe failed: {e.stderr}", exc_info=True)
                 raise RuntimeError(f"Video-Analyse fehlgeschlagen: {e.stderr}") from e
             dimensions = result.stdout.strip().split('x')
             
@@ -104,13 +104,14 @@ class VideoProcessor:
             
             return width, height
             
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Fehler beim Lesen der Video-Informationen: {e.stderr}")
         except subprocess.TimeoutExpired as e:
             logging.exception(f"ffprobe timeout after {FFMPEG_TIMEOUT_SHORT}s on file: {video_path}", exc_info=True)
             raise RuntimeError(f"Video-Analyse timeout nach {FFMPEG_TIMEOUT_SHORT}s - Datei möglicherweise beschädigt") from e
         except (ValueError, IndexError) as e:
-            raise ValueError(f"Ungültige Video-Dimensionen: {e}")
+            raise ValueError(f"Ungültige Video-Dimensionen: {e}") from e
+        except Exception as e:
+            logging.exception(f"Unexpected error analyzing video: {video_path}", exc_info=True)
+            raise RuntimeError(f"Unerwarteter Fehler bei Video-Analyse: {e}") from e
     
     def scale_video(self, input_path: str, output_path: str, new_width: int):
         """Skaliert Video mit FFmpeg"""
