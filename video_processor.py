@@ -93,7 +93,7 @@ class VideoProcessor:
                 result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
                                       timeout=FFMPEG_TIMEOUT_SHORT, check=True, **SUBPROCESS_FLAGS)
             except subprocess.CalledProcessError as e:
-                logging.error(f"FFprobe failed: {e.stderr}", exc_info=True)
+                logging.exception(f"FFprobe failed: {e.stderr}")
                 raise RuntimeError(f"Video-Analyse fehlgeschlagen: {e.stderr}") from e
             dimensions = result.stdout.strip().split('x')
             
@@ -106,12 +106,12 @@ class VideoProcessor:
             return width, height
             
         except subprocess.TimeoutExpired as e:
-            logging.exception(f"ffprobe timeout after {FFMPEG_TIMEOUT_SHORT}s on file: {video_path}", exc_info=True)
+            logging.exception(f"ffprobe timeout after {FFMPEG_TIMEOUT_SHORT}s on file: {video_path}")
             raise RuntimeError(f"Video-Analyse timeout nach {FFMPEG_TIMEOUT_SHORT}s - Datei möglicherweise beschädigt") from e
         except (ValueError, IndexError) as e:
             raise ValueError(f"Ungültige Video-Dimensionen: {e}") from e
         except Exception as e:
-            logging.exception(f"Unexpected error analyzing video: {video_path}", exc_info=True)
+            logging.exception(f"Unexpected error analyzing video: {video_path}")
             raise RuntimeError(f"Unerwarteter Fehler bei Video-Analyse: {e}") from e
     
     def scale_video(self, input_path: str, output_path: str, new_width: int):
@@ -122,11 +122,11 @@ class VideoProcessor:
                 new_width += 1
             
             cmd = [
-                os.path.abspath(self.ffmpeg_path), '-nostdin',
-                '-i', os.path.abspath(input_path),
+                self.ffmpeg_path, '-nostdin',
+                '-i', input_path,
                 '-vf', f'scale={new_width}:-2',
                 '-y',
-                os.path.abspath(output_path)
+                output_path
             ]
             
             subprocess.run(cmd, capture_output=True, text=True, shell=False,
@@ -213,12 +213,11 @@ class VideoProcessor:
             raise RuntimeError("Unerwarteter Fehler bei der Untertitel-Verarbeitung") from e
         finally:
             # Temporäre Untertitel-Datei aufräumen
-            if 'temp_subtitle_abs' in locals() and os.path.exists(temp_subtitle_abs):
+            if temp_subtitle_path and os.path.exists(temp_subtitle_abs):
                 try:
                     os.remove(temp_subtitle_abs)
                 except OSError as e:
                     logging.debug("Failed to cleanup temp file %s: %s", temp_subtitle_path, e)
-                    pass  # Ignoriere Fehler beim Aufräumen
                     
     def scale_video_with_translation(self, input_path: str, output_path: str, new_width: int, 
                                  original_subtitle_path: str, translated_subtitle_path: str,
