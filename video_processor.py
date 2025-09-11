@@ -6,10 +6,10 @@ Video-Verarbeitung mit FFmpeg
 import subprocess
 import os
 import sys
-from typing import Tuple
-import shlex
 import shutil
 import tempfile
+import logging
+from typing import Tuple
 
 # FFmpeg timeout constants (in seconds)
 FFMPEG_TIMEOUT_SHORT = 30    # For quick operations (version check, etc.)
@@ -27,14 +27,28 @@ class VideoProcessor:
         self.ffmpeg_path = self._find_ffmpeg()
         
     def _find_ffmpeg(self) -> str:
-        """Findet FFmpeg-Pfad im System"""
-        # Versuche ffmpeg im PATH zu finden
+        """Findet FFmpeg-Pfad im System (secure, no shell injection)"""
+        # First try: Use shutil.which (cross-platform, secure)
+        ffmpeg_path = shutil.which('ffmpeg')
+        if ffmpeg_path:
+            return ffmpeg_path
+            
+        # Fallback: Platform-specific command (secure subprocess call)
         try:
-            result = subprocess.run(['where', 'ffmpeg'], 
-                                 capture_output=True, text=True, shell=True, **SUBPROCESS_FLAGS)
+            if sys.platform == "win32":
+                # Windows: use 'where' command securely
+                result = subprocess.run(['where', 'ffmpeg'], 
+                                     capture_output=True, text=True, shell=False, 
+                                     timeout=FFMPEG_TIMEOUT_SHORT, **SUBPROCESS_FLAGS)
+            else:
+                # Unix-like: use 'which' command securely  
+                result = subprocess.run(['which', 'ffmpeg'],
+                                     capture_output=True, text=True, shell=False,
+                                     timeout=FFMPEG_TIMEOUT_SHORT)
             if result.returncode == 0:
                 return result.stdout.strip().split('\n')[0]
-        except:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            logging.warning(f"FFmpeg path detection failed: {e}")
             pass
             
         # Fallback: Standard-Pfade prüfen
@@ -64,7 +78,8 @@ class VideoProcessor:
                 video_path
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True, **SUBPROCESS_FLAGS)
+            result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
+                                  timeout=FFMPEG_TIMEOUT_SHORT, check=True, **SUBPROCESS_FLAGS)
             dimensions = result.stdout.strip().split('x')
             
             if len(dimensions) != 2:
@@ -77,6 +92,9 @@ class VideoProcessor:
             
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Fehler beim Lesen der Video-Informationen: {e.stderr}")
+        except subprocess.TimeoutExpired as e:
+            logging.error(f"ffprobe timeout after {FFMPEG_TIMEOUT_SHORT}s on file: {video_path}")
+            raise RuntimeError(f"Video-Analyse timeout nach {FFMPEG_TIMEOUT_SHORT}s - Datei möglicherweise beschädigt")
         except (ValueError, IndexError) as e:
             raise ValueError(f"Ungültige Video-Dimensionen: {e}")
     
@@ -140,7 +158,8 @@ class VideoProcessor:
                          capture_output=True, shell=False, timeout=FFMPEG_TIMEOUT_SHORT, 
                          check=True, **SUBPROCESS_FLAGS)
             return True
-        except:
+        except Exception as e:
+            logging.exception(f"FFmpeg availability check failed: {e}")
             return False
     
     def get_ffmpeg_version(self) -> str:
@@ -152,7 +171,8 @@ class VideoProcessor:
             # Erste Zeile enthält Version
             first_line = result.stdout.split('\n')[0]
             return first_line
-        except:
+        except Exception as e:
+            logging.exception(f"FFmpeg version check failed: {e}")
             return "Unbekannt"
             
     def scale_video_with_subtitles(self, input_path: str, output_path: str, new_width: int, subtitle_path: str):
@@ -199,7 +219,8 @@ class VideoProcessor:
             if temp_subtitle_path and os.path.exists(temp_subtitle_path):
                 try:
                     os.remove(temp_subtitle_path)
-                except:
+                except OSError as e:
+                    logging.debug(f"Failed to cleanup temp file {temp_subtitle_path}: {e}")
                     pass  # Ignoriere Fehler beim Aufräumen
                     
     def scale_video_with_translation(self, input_path: str, output_path: str, new_width: int, 
@@ -348,7 +369,8 @@ class VideoProcessor:
             for p in [temp_original_srt, temp_translated_srt, temp_original_ass, temp_translated_ass]:
                 if p and os.path.exists(p):
                     try: os.remove(p)
-                    except: pass
+                    except OSError: 
+                        pass  # Ignore cleanup errors
 
     
     def _parse_srt(self, srt_path: str):
