@@ -4,8 +4,33 @@ Subtitle Translator - Übersetzt SRT-Dateien mit verschiedenen Services
 
 import os
 import re
+import sys
+import subprocess
 import tempfile
 from typing import List, Dict, Optional, Tuple
+
+# Import debug logger
+from debug_logger import debug_logger
+
+# Auto-mode fallback order helper
+def _get_auto_fallback_order() -> List[str]:
+    """Return auto mode fallback order from env or default.
+
+    Env vars (first wins):
+      - SRT_FALLBACK_ORDER
+      - SMART_SRT_FALLBACK_ORDER
+    Format: comma-separated, e.g. "openai,google,whisper"
+    """
+    raw = os.getenv("SRT_FALLBACK_ORDER") or os.getenv("SMART_SRT_FALLBACK_ORDER") or "openai,google,whisper"
+    order = [t.strip().lower() for t in raw.split(",") if t.strip()]
+    valid = {"openai", "google", "whisper"}
+    return [m for m in order if m in valid]
+
+# Windows-spezifische subprocess-Konfiguration um Console-Fenster zu unterdrücken
+if sys.platform == "win32":
+    SUBPROCESS_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW}
+else:
+    SUBPROCESS_FLAGS = {}
 
 try:
     import translators as ts
@@ -13,12 +38,24 @@ try:
 except ImportError:
     TRANSLATORS_AVAILABLE = False
 
-# Optional high-quality LLM translation module (OpenAI)
+# Optional high-quality LLM translation module (OpenAI) - now using smart-srt-translator package
 try:
-    from smart_translation import translate_srt as smart_translate_srt
+    from smart_srt_translator import translate_srt_smart as smart_translate_srt
+    from smart_srt_translator import TranslateOptions
+    from smart_srt_translator.env import load_env_vars
+    try:
+        # Optional: provider import (requires openai extra installed)
+        from smart_srt_translator.providers.openai_provider import OpenAITranslator
+        OPENAI_PROVIDER_AVAILABLE = True
+    except Exception as e:
+        OPENAI_PROVIDER_AVAILABLE = False
+        debug_logger.error("OpenAI provider import failed", e)
     SMART_TRANSLATION_AVAILABLE = True
-except Exception:
+    debug_logger.debug("smart-srt-translator imported successfully")
+except Exception as e:
     SMART_TRANSLATION_AVAILABLE = False
+    OPENAI_PROVIDER_AVAILABLE = False
+    debug_logger.error("smart-srt-translator import failed", e)
 
 try:
     import whisper
@@ -47,7 +84,7 @@ class WhisperTranslator:
             "-y", audio_path
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, **SUBPROCESS_FLAGS)
         if result.returncode != 0:
             raise Exception(f"FFmpeg Audio-Extraktion fehlgeschlagen: {result.stderr}")
             
@@ -55,7 +92,16 @@ class WhisperTranslator:
     
     def translate_via_whisper(self, video_path: str, original_srt_path: str, 
                             target_lang: str, model_size: str = "base") -> str:
-        """Übersetzt Video via Whisper-Transkription mit Original-Timing"""
+        """
+        Translates video audio to English via Whisper with original SRT timing.
+        
+        Note: Whisper's translate task can ONLY output English. The target_lang
+        parameter must be 'en' or this method will raise an exception.
+        """
+        # Validate that target language is English
+        if target_lang != "en":
+            raise Exception(f"Whisper translate task only supports English output, not '{target_lang}'")
+        
         try:
             # 1. Audio extrahieren
             audio_path = self.extract_audio_for_whisper(video_path)
@@ -68,10 +114,10 @@ class WhisperTranslator:
             # 3. Original SRT-Timing lesen
             original_segments = self._parse_srt_timing(original_srt_path)
             
-            # 4. Whisper-Transkription in Zielsprache
+            # 4. Whisper-Translation (to English only)
             result = self.model.transcribe(
                 audio_path, 
-                language=target_lang if target_lang != 'auto' else None,
+                task="translate",  # Use translate task, not transcribe
                 word_timestamps=True
             )
             
@@ -181,6 +227,9 @@ class SubtitleTranslator:
     """Übersetzt SRT-Untertitel zwischen verschiedenen Sprachen"""
     
     def __init__(self):
+        # Initialize logging
+        debug_logger.test_imports()
+        
         self.whisper_translator = None
         
         # Check dependencies
@@ -252,26 +301,171 @@ class SubtitleTranslator:
     def translate_srt(self, input_path: str, source_lang: str, target_lang: str, 
                      method: str = "google", video_path: str = None, 
                      whisper_model: str = "base") -> str:
-        """Übersetzt eine SRT-Datei und gibt den Pfad der übersetzten Datei zurück"""
-        # OpenAI (LLM) Uebersetzung via smart_translation, falls verfuegbar
-        if method in ("openai", "auto") and SMART_TRANSLATION_AVAILABLE:
+        """
+                     Translate an SRT file into the target language and return the path to the translated SRT.
+                     
+                     This function selects a translation backend based on `method` and available optional dependencies:
+                     - "openai" or "auto": attempt LLM-based timed translation via smart_srt_translator (if available); on failure falls back to other methods.
+                     - "whisper": use Whisper-based transcription-to-translation that maps transcripts back to the original SRT timings (requires `video_path` and Whisper availability). Note: Whisper can only translate TO English ('en'), target_lang will be forced to 'en'.
+                     - "google": translate using the translators library.
+                     
+                     Parameters that require non-obvious context:
+                     - method: one of "google", "whisper", "openai", or "auto". Behavior depends on availability flags for optional backends.
+                     - video_path: required when method == "whisper"; path to the source video used for transcription.
+                     - whisper_model: Whisper model size to load when using the "whisper" method.
+                     
+                     Returns:
+                         str: Path to the generated translated SRT file.
+                     
+                     Raises:
+                         Exception: If the requested method is unavailable, required dependencies are missing, or `video_path` is not provided for Whisper.
+                     """
+        
+        # === DEBUG LOGGING START ===
+        debug_logger.step("Starting translate_srt", {
+            "input_path": input_path,
+            "source_lang": source_lang, 
+            "target_lang": target_lang,
+            "method": method,
+            "video_path": video_path,
+            "whisper_model": whisper_model
+        })
+        
+        debug_logger.file_info(input_path, "Input SRT file")
+        
+        # Log availability flags
+        debug_logger.debug("Availability flags", {
+            "SMART_TRANSLATION_AVAILABLE": SMART_TRANSLATION_AVAILABLE,
+            "TRANSLATORS_AVAILABLE": TRANSLATORS_AVAILABLE,
+            "WHISPER_AVAILABLE": WHISPER_AVAILABLE
+        })
+        # === DEBUG LOGGING END ===
+        
+        # AUTO mode with configurable fallback order
+        if method == "auto":
+            order = _get_auto_fallback_order()
+            debug_logger.debug("Auto mode fallback order", {"order": order})
+            last_err: Optional[Exception] = None
+            for m in order:
+                try:
+                    if m == "openai" and SMART_TRANSLATION_AVAILABLE:
+                        debug_logger.step("Attempting OpenAI Translation", {
+                            "function": "smart_translate_srt",
+                            "src_lang": source_lang,
+                            "tgt_lang": target_lang
+                        })
+                        try:
+                            load_env_vars()
+                        except Exception:
+                            pass
+                        if not OPENAI_PROVIDER_AVAILABLE:
+                            raise RuntimeError("OpenAI provider not available (install smart-srt-translator[openai])")
+                        provider = OpenAITranslator()
+                        debug_logger.debug("Initialized OpenAI provider", {"model": getattr(provider, "model", "?")})
+                        result_path = smart_translate_srt(
+                            input_path,
+                            src_lang=source_lang,
+                            tgt_lang=target_lang,
+                            provider=provider,
+                            wrap_width=120,  # Avoid breaking long sentences
+                            balance=False,   # Don't redistribute text between segments
+                            smooth=False     # Keep original timing structure
+                        )
+                        debug_logger.step("OpenAI Translation SUCCESS", {"result_path": result_path})
+                        debug_logger.file_info(result_path, "OpenAI translated SRT file")
+                        return result_path
+                    elif m == "google" and TRANSLATORS_AVAILABLE:
+                        debug_logger.step("Attempting Google translators backend", {
+                            "src_lang": source_lang,
+                            "tgt_lang": target_lang,
+                        })
+                        return self._translate_srt_google(input_path, source_lang, target_lang)
+                    elif m == "whisper" and self.has_whisper and video_path and target_lang == "en":
+                        debug_logger.step("Attempting Whisper translate (to English)", {
+                            "video_path": video_path,
+                            "whisper_model": whisper_model,
+                        })
+                        if self.whisper_translator is None:
+                            self.whisper_translator = WhisperTranslator()
+                        return self.whisper_translator.translate_via_whisper(
+                            video_path, input_path, "en", whisper_model
+                        )
+                except Exception as e:
+                    last_err = e
+                    debug_logger.error(f"AUTO fallback '{m}' failed", e)
+                    continue
+            if last_err:
+                raise last_err
+            raise Exception("No available translation method succeeded in AUTO mode")
+
+        # OpenAI (LLM) Uebersetzung via smart-srt-translator, falls verfuegbar
+        if method == "openai" and SMART_TRANSLATION_AVAILABLE:
+            debug_logger.step("Attempting OpenAI Translation", {
+                "function": "smart_translate_srt",
+                "src_lang": source_lang,
+                "tgt_lang": target_lang
+            })
             try:
-                return smart_translate_srt(
+                # Ensure OPENAI_* env is loaded from .env if present
+                try:
+                    load_env_vars()
+                except Exception:
+                    pass
+
+                if not OPENAI_PROVIDER_AVAILABLE:
+                    raise RuntimeError("OpenAI provider not available (install smart-srt-translator[openai])")
+
+                provider = OpenAITranslator()
+                debug_logger.debug("Initialized OpenAI provider", {"model": getattr(provider, "model", "?")})
+
+                # Call smart pipeline with explicit OpenAI provider
+                result_path = smart_translate_srt(
                     input_path,
-                    source_lang=source_lang,
-                    target_lang=target_lang,
-                    provider="openai",
-                    keep_timing=True,
+                    src_lang=source_lang,
+                    tgt_lang=target_lang,
+                    provider=provider,
+                    wrap_width=120,  # Avoid breaking long sentences
+                    balance=False,   # Don't redistribute text between segments
+                    smooth=False     # Keep original timing structure
                 )
+                debug_logger.step("OpenAI Translation SUCCESS", {"result_path": result_path})
+                debug_logger.file_info(result_path, "OpenAI translated SRT file")
+                return result_path
             except Exception as e:
-                print(f"OpenAI-Uebersetzung fehlgeschlagen, Fallback auf Google: {e}")
+                debug_logger.error("OpenAI Translation FAILED", e)
+                # If user explicitly requested OpenAI, do not silently fall back
+                if method == "openai":
+                    raise
+                # Auto mode: try graceful fallbacks
+                # Prefer Google translators backend if available
+                if TRANSLATORS_AVAILABLE:
+                    debug_logger.step("FALLBACK: Using Google translators backend", {
+                        "src_lang": source_lang,
+                        "tgt_lang": target_lang,
+                    })
+                    return self._translate_srt_google(input_path, source_lang, target_lang)
+                # If Whisper is available and target is English and video is provided, use Whisper
+                if self.has_whisper and video_path and target_lang == "en":
+                    debug_logger.step("FALLBACK: Using Whisper translate (to English)", {
+                        "video_path": video_path,
+                        "whisper_model": whisper_model,
+                    })
+                    if self.whisper_translator is None:
+                        self.whisper_translator = WhisperTranslator()
+                    return self.whisper_translator.translate_via_whisper(
+                        video_path, input_path, "en", whisper_model
+                    )
+                # No viable fallback
+                raise
 
         if method == "whisper" and self.has_whisper and video_path:
-            # Whisper-Übersetzung
+            # Whisper-Übersetzung (nur nach Englisch möglich)
+            if target_lang != "en":
+                raise Exception(f"Whisper kann nur nach Englisch ('en') übersetzen, nicht nach '{target_lang}'. Verwende stattdessen 'google' oder 'openai' Methode.")
             if self.whisper_translator is None:
                 self.whisper_translator = WhisperTranslator()
             return self.whisper_translator.translate_via_whisper(
-                video_path, input_path, target_lang, whisper_model
+                video_path, input_path, "en", whisper_model  # Force target to English
             )
         
         elif method == "google" and self.has_translators:

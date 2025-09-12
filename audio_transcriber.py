@@ -5,11 +5,21 @@ Audio Transcriber - GUI-Anwendung für Video-zu-SRT Transkription mit Whisper
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
+import sys
 import tempfile
 import threading
 from typing import List, Dict, Optional, Callable
 import subprocess
 import json
+
+# FFmpeg timeout constant (in seconds)
+FFMPEG_TIMEOUT = 300  # 5 minutes should be enough for audio extraction
+
+# Windows-spezifische subprocess-Konfiguration um Console-Fenster zu unterdrücken
+if sys.platform == "win32":
+    SUBPROCESS_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW}
+else:
+    SUBPROCESS_FLAGS = {}
 
 try:
     import whisper
@@ -53,7 +63,20 @@ class AudioTranscriber:
         self.setup_ui()
         
     def setup_ui(self):
-        """Erstellt die Benutzeroberfläche"""
+        """
+        Set up the transcription tool's Tkinter user interface.
+        
+        Creates and lays out the main window contents used by AudioTranscriber:
+        - Header and video filename label.
+        - Whisper model and language selection controls (radio buttons).
+        - Action buttons for extracting audio, transcribing, and exporting (with initial enabled/disabled states).
+        - Progress label and indeterminate progress bar.
+        - Results area containing a scrollable Treeview of detected segments and an editor for selected segment text.
+        - Event bindings (Treeview selection to load a segment into the editor) and grid weight configuration for responsive resizing.
+        
+        Side effects:
+        - Initializes instance UI-related attributes such as self.model_var, self.language_var, self.extract_button, self.transcribe_button, self.export_button, self.progress_var, self.progress_label, self.progress_bar, self.segments_tree, and self.edit_text.
+        """
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
@@ -84,7 +107,7 @@ class AudioTranscriber:
         lang_frame = ttk.LabelFrame(main_frame, text="Sprache", padding="5")
         lang_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        self.language_var = tk.StringVar(value="de")
+        self.language_var = tk.StringVar(value="en")
         languages = [("Deutsch", "de"), ("Englisch", "en"), ("Auto-Erkennung", "auto")]
         
         for i, (text, value) in enumerate(languages):
@@ -179,7 +202,7 @@ class AudioTranscriber:
             
             # FFmpeg Befehl für Audio-Extraktion
             cmd = [
-                "ffmpeg", "-i", self.video_path,
+                "ffmpeg", "-nostdin", "-i", self.video_path,
                 "-vn",  # Kein Video
                 "-acodec", "pcm_s16le",  # WAV Format
                 "-ar", "16000",  # 16kHz Sample Rate für Whisper
@@ -188,14 +211,29 @@ class AudioTranscriber:
                 self.temp_audio_path
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                raise Exception(f"FFmpeg Fehler: {result.stderr}")
+            # Hardened subprocess invocation with proper error handling
+            subprocess.run(
+                cmd, 
+                capture_output=True, 
+                text=True, 
+                shell=False, 
+                timeout=FFMPEG_TIMEOUT, 
+                check=True, 
+                **SUBPROCESS_FLAGS
+            )
             
             self.root.after(0, self._extraction_complete)
             
+        except subprocess.CalledProcessError as e:
+            # FFmpeg failed with non-zero exit code
+            error_msg = f"FFmpeg Fehler (Exit Code {e.returncode}):\nStderr: {e.stderr}\nStdout: {e.stdout}"
+            self.root.after(0, self._extraction_error, error_msg)
+        except subprocess.TimeoutExpired as e:
+            # FFmpeg timed out
+            error_msg = f"FFmpeg Timeout nach {FFMPEG_TIMEOUT}s - Video möglicherweise zu groß oder beschädigt"
+            self.root.after(0, self._extraction_error, error_msg)
         except Exception as e:
+            # Other errors (file not found, permission issues, etc.)
             self.root.after(0, self._extraction_error, str(e))
             
     def _extraction_complete(self):

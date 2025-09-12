@@ -115,6 +115,7 @@ VidScaler/
 ## Installation (Alle Dependencies)
 ```bash
 pip install openai-whisper matplotlib pydub translators
+pip install --index-url https://test.pypi.org/simple/ smart-srt-translator
 ```
 
 ## 🎉 Phase 3 Features (Übersetzung) - ✅ PRODUKTIONSREIF!
@@ -130,7 +131,7 @@ pip install openai-whisper matplotlib pydub translators
 ## 🚀 Phase 4 Features (Bidirektionale Whisper-Übersetzung) - ✅ IMPLEMENTIERT!
 - **✅ WhisperTranslator-Klasse**: Audio-Extraktion + Whisper-Transkription in Zielsprache
 - **✅ Smart Timing-Mapping**: Whisper-Segmente auf Original-SRT-Timing gemappt
-- **✅ Dual Translation Methods**: Google Translate (schnell) vs Whisper (hochwertig)
+- **✅ Triple Translation Methods**: OpenAI (beste Qualität) vs Google Translate (schnell) vs Whisper (English-only)
 - **✅ GUI Method-Selection**: Dropdown mit dynamischen Whisper-Model-Optionen
 - **✅ Model Caching**: Whisper-Modelle werden wiederverwendet für Performance
 - **✅ Robustes Cleanup**: Automatische Bereinigung aller temporären Audio-Dateien
@@ -142,7 +143,13 @@ pip install openai-whisper matplotlib pydub translators
 3. **Übersetzung aktivieren** → Sprachen + **Methode** wählen → Modus wählen
 4. **"Mit Übersetzung skalieren"** → Fertig!
 
-## 📋 Phase 5 Roadmap (Planned)
+## 🎉 Phase 5 Features (Production Quality & UX) - ✅ FERTIG!
+- **✅ Smart-SRT-Translator Integration**: Lokales `smart_translation.py` durch PyPI-Modul ersetzt
+- **✅ Optimierte GUI-Defaults**: Fenstergröße, Audio-Transkription (Base+English), Übersetzung (OpenAI+EN-Source)
+- **✅ Benutzerfreundlichkeit**: Alle Standard-Einstellungen auf häufigste Use-Cases optimiert
+- **✅ Modular Architecture**: Externe Dependencies über offizielle Package-Manager
+
+## 📋 Phase 6 Roadmap (Future)
 - **🎯 Translation Editor**: GUI-Fenster zum manuellen Korrigieren von Übersetzungen
 - **📝 Segment-by-Segment Editing**: Wie AudioTranscriber, aber für übersetzte Texte
 - **🔄 Export-Integration**: Korrigierte Übersetzung direkt in Video-Pipeline
@@ -216,3 +223,44 @@ def _map_whisper_to_original_timing(whisper_segments, original_segments):
 - **Dynamic Widgets**: Whisper-Model-Dropdown erscheint nur bei Whisper-Auswahl
 - **Dependency-Check**: Automatische Erkennung ob Whisper/Translators verfügbar
 - **Smart State-Management**: Widget-States abhängig von Methoden-Auswahl
+
+## 🏗️ Translation Architecture (Analysis by Code-Rabbit)
+
+### Note: Architecture analysis and sequence diagram provided by Code-Rabbit AI Code Review
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant GUI as VidScaler GUI
+    participant Translator as translator.py
+    participant SmartSRT as smart-srt-translator
+    participant OpenAI as OpenAI API
+    participant FFmpeg as FFmpeg
+
+    User->>GUI: Select translation options
+    GUI->>Translator: translate_srt(srt_path, source_lang, target_lang, method)
+    
+    alt method == "openai"
+        Translator->>SmartSRT: load_env_vars()
+        SmartSRT-->>Translator: Environment loaded
+        Translator->>SmartSRT: OpenAITranslator()
+        SmartSRT-->>Translator: Translator instance
+        Translator->>SmartSRT: translate(source_lang, target_lang, srt_path)
+        SmartSRT->>OpenAI: API request
+        OpenAI-->>SmartSRT: Translated content
+        SmartSRT-->>Translator: Translated SRT
+    else method == "google"
+        Translator->>Translator: _translate_via_google(srt_path, target_lang)
+        Translator-->>Translator: Translated SRT
+    else method == "whisper"
+        Translator->>Translator: translate_via_whisper(video_path, srt_path, target_lang, model)
+        Translator-->>Translator: Translated SRT
+    end
+    
+    Translator-->>GUI: Translation complete
+    GUI->>FFmpeg: Process video with translated subtitles
+    FFmpeg-->>GUI: Video with subtitles ready
+    GUI-->>User: Processing complete
+```
+
+This sequence diagram illustrates the translation workflow, showing how the application integrates multiple translation methods through a unified interface. The OpenAI translation path demonstrates proper provider initialization through the smart-srt-translator package, while fallback methods (Google Translate, Whisper) provide alternative translation options.

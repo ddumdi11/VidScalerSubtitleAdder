@@ -60,6 +60,15 @@ Desktop.ini
 *.m4a
 *.ogg
 
+# Screenshots and images (documentation artifacts)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.webp
+
 # Misc temp files
 *.tmp
 *.bak
