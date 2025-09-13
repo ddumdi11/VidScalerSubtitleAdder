@@ -26,6 +26,36 @@ def _get_auto_fallback_order() -> List[str]:
     valid = {"openai", "google", "whisper"}
     return [m for m in order if m in valid]
 
+# Language-aware preset for German
+def _get_de_preset() -> Dict[str, object]:
+    """Return DE-friendly preset parameters (can be overridden via env).
+
+    Env overrides:
+      - SRT_DE_WRAP (int)
+      - SRT_DE_EXPANSION_FACTOR (float)
+      - SRT_DE_MIN_SEG_DUR (float seconds)
+      - SRT_DE_READING_WPM (int)
+      - SRT_DE_MIN_GAP_MS (int)
+    """
+    def _int(name: str, default: int) -> int:
+        try:
+            return int(os.getenv(name, str(default)))
+        except Exception:
+            return default
+    def _float(name: str, default: float) -> float:
+        try:
+            return float(os.getenv(name, str(default)))
+        except Exception:
+            return default
+
+    return {
+        "wrap_width": _int("SRT_DE_WRAP", 120),
+        "expansion_factor": _float("SRT_DE_EXPANSION_FACTOR", 1.35),
+        "min_seg_dur": _float("SRT_DE_MIN_SEG_DUR", 2.2),
+        "reading_wpm": _int("SRT_DE_READING_WPM", 200),
+        "min_gap_ms": _int("SRT_DE_MIN_GAP_MS", 120),
+    }
+
 # Windows-spezifische subprocess-Konfiguration um Console-Fenster zu unterdrücken
 if sys.platform == "win32":
     SUBPROCESS_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW}
@@ -300,7 +330,7 @@ class SubtitleTranslator:
     
     def translate_srt(self, input_path: str, source_lang: str, target_lang: str, 
                      method: str = "google", video_path: str = None, 
-                     whisper_model: str = "base") -> str:
+                     whisper_model: str = "base", de_readability_optimization: bool = False) -> str:
         """
                      Translate an SRT file into the target language and return the path to the translated SRT.
                      
@@ -333,6 +363,25 @@ class SubtitleTranslator:
         
         debug_logger.file_info(input_path, "Input SRT file")
         
+        # Parse input SRT to get segment info for debugging
+        try:
+            input_segments = self.parse_srt(input_path)
+            debug_logger.debug("Input SRT analysis", {
+                "total_segments": len(input_segments),
+                "first_segment": {
+                    "index": input_segments[0]['index'] if input_segments else None,
+                    "timestamp": input_segments[0]['timestamp'] if input_segments else None,
+                    "text_preview": input_segments[0]['text'][:50] + "..." if input_segments and len(input_segments[0]['text']) > 50 else input_segments[0]['text'] if input_segments else None
+                },
+                "last_segment": {
+                    "index": input_segments[-1]['index'] if input_segments else None,
+                    "timestamp": input_segments[-1]['timestamp'] if input_segments else None,
+                    "text_preview": input_segments[-1]['text'][:50] + "..." if input_segments and len(input_segments[-1]['text']) > 50 else input_segments[-1]['text'] if input_segments else None
+                }
+            })
+        except Exception as e:
+            debug_logger.error("Failed to parse input SRT for analysis", e)
+        
         # Log availability flags
         debug_logger.debug("Availability flags", {
             "SMART_TRANSLATION_AVAILABLE": SMART_TRANSLATION_AVAILABLE,
@@ -362,17 +411,105 @@ class SubtitleTranslator:
                             raise RuntimeError("OpenAI provider not available (install smart-srt-translator[openai])")
                         provider = OpenAITranslator()
                         debug_logger.debug("Initialized OpenAI provider", {"model": getattr(provider, "model", "?")})
-                        result_path = smart_translate_srt(
-                            input_path,
-                            src_lang=source_lang,
-                            tgt_lang=target_lang,
-                            provider=provider,
-                            wrap_width=120,  # Avoid breaking long sentences
-                            balance=False,   # Don't redistribute text between segments
-                            smooth=False     # Keep original timing structure
-                        )
+                        # Language-aware defaults for German with optimization choice
+                        is_de = (target_lang or "").lower().startswith("de")
+                        if is_de and de_readability_optimization:
+                            # German STRICT TIMING mode: preserve timing but may lose segments
+                            de = _get_de_preset()
+                            debug_logger.debug("German STRICT TIMING mode parameters", {
+                                "de_readability_optimization": True,
+                                "preserve_timing": True,
+                                "wrap_width": max(100, int(de["wrap_width"])),
+                                "balance": False,
+                                "smooth": False,
+                                "expand_timing": False
+                            })
+                            result_path = smart_translate_srt(
+                                input_path,
+                                src_lang=source_lang,
+                                tgt_lang=target_lang,
+                                provider=provider,
+                                preserve_timing=True,
+                                wrap_width=max(100, int(de["wrap_width"])),
+                                balance=False,
+                                smooth=False,
+                            )
+                        elif is_de:
+                            # German EXPANSION mode: recommended for German (default)
+                            de = _get_de_preset()
+                            debug_logger.debug("German EXPANSION mode parameters", {
+                                "de_readability_optimization": False,
+                                "expand_timing": True,
+                                "expansion_factor": de["expansion_factor"], 
+                                "min_seg_dur": de["min_seg_dur"],
+                                "reading_wpm": de["reading_wpm"],
+                                "min_gap_ms": de["min_gap_ms"],
+                                "wrap_width": max(100, int(de["wrap_width"])),
+                                "balance": False,
+                                "smooth": False,
+                                "preserve_timing": False
+                            })
+                            result_path = smart_translate_srt(
+                                input_path,
+                                src_lang=source_lang,
+                                tgt_lang=target_lang,
+                                provider=provider,
+                                expand_timing=True,
+                                expansion_factor=de["expansion_factor"], # 1.35
+                                min_seg_dur=de["min_seg_dur"],           # 2.2
+                                reading_wpm=de["reading_wpm"],           # 200
+                                min_gap_ms=de["min_gap_ms"],             # 120
+                                wrap_width=max(100, int(de["wrap_width"])),
+                                balance=False,
+                                smooth=False,
+                            )
+                        else:
+                            # Conservative non-DE defaults
+                            result_path = smart_translate_srt(
+                                input_path,
+                                src_lang=source_lang,
+                                tgt_lang=target_lang,
+                                provider=provider,
+                                wrap_width=120,
+                                balance=False,
+                                smooth=False,
+                            )
                         debug_logger.step("OpenAI Translation SUCCESS", {"result_path": result_path})
                         debug_logger.file_info(result_path, "OpenAI translated SRT file")
+                        
+                        # Parse output SRT to analyze results
+                        try:
+                            output_segments = self.parse_srt(result_path)
+                            debug_logger.debug("Output SRT analysis", {
+                                "total_segments": len(output_segments),
+                                "segment_count_diff": len(output_segments) - len(input_segments),
+                                "first_segment": {
+                                    "index": output_segments[0]['index'] if output_segments else None,
+                                    "timestamp": output_segments[0]['timestamp'] if output_segments else None,
+                                    "text_preview": output_segments[0]['text'][:50] + "..." if output_segments and len(output_segments[0]['text']) > 50 else output_segments[0]['text'] if output_segments else None
+                                },
+                                "last_segment": {
+                                    "index": output_segments[-1]['index'] if output_segments else None,
+                                    "timestamp": output_segments[-1]['timestamp'] if output_segments else None,
+                                    "text_preview": output_segments[-1]['text'][:50] + "..." if output_segments and len(output_segments[-1]['text']) > 50 else output_segments[-1]['text'] if output_segments else None
+                                }
+                            })
+                            
+                            # Timing comparison
+                            if input_segments and output_segments:
+                                debug_logger.debug("Timing comparison", {
+                                    "input_first_timestamp": input_segments[0]['timestamp'],
+                                    "output_first_timestamp": output_segments[0]['timestamp'],
+                                    "input_last_timestamp": input_segments[-1]['timestamp'],
+                                    "output_last_timestamp": output_segments[-1]['timestamp'],
+                                    "timestamps_match": (
+                                        input_segments[0]['timestamp'] == output_segments[0]['timestamp'] and
+                                        input_segments[-1]['timestamp'] == output_segments[-1]['timestamp']
+                                    )
+                                })
+                        except Exception as e:
+                            debug_logger.error("Failed to analyze output SRT", e)
+                        
                         return result_path
                     elif m == "google" and TRANSLATORS_AVAILABLE:
                         debug_logger.step("Attempting Google translators backend", {
@@ -418,18 +555,105 @@ class SubtitleTranslator:
                 provider = OpenAITranslator()
                 debug_logger.debug("Initialized OpenAI provider", {"model": getattr(provider, "model", "?")})
 
-                # Call smart pipeline with explicit OpenAI provider
-                result_path = smart_translate_srt(
-                    input_path,
-                    src_lang=source_lang,
-                    tgt_lang=target_lang,
-                    provider=provider,
-                    wrap_width=120,  # Avoid breaking long sentences
-                    balance=False,   # Don't redistribute text between segments
-                    smooth=False     # Keep original timing structure
-                )
+                # Call smart pipeline with language-aware defaults and optimization choice
+                is_de = (target_lang or "").lower().startswith("de")
+                if is_de and de_readability_optimization:
+                    # German STRICT TIMING mode: preserve timing but may lose segments
+                    de = _get_de_preset()
+                    debug_logger.debug("German STRICT TIMING mode parameters", {
+                        "de_readability_optimization": True,
+                        "preserve_timing": True,
+                        "wrap_width": max(100, int(de["wrap_width"])),
+                        "balance": False,
+                        "smooth": False,
+                        "expand_timing": False
+                    })
+                    result_path = smart_translate_srt(
+                        input_path,
+                        src_lang=source_lang,
+                        tgt_lang=target_lang,
+                        provider=provider,
+                        preserve_timing=True,
+                        wrap_width=max(100, int(de["wrap_width"])),
+                        balance=False,
+                        smooth=False,
+                    )
+                elif is_de:
+                    # German EXPANSION mode: recommended for German (default)
+                    de = _get_de_preset()
+                    debug_logger.debug("German EXPANSION mode parameters", {
+                        "de_readability_optimization": False,
+                        "expand_timing": True,
+                        "expansion_factor": de["expansion_factor"], 
+                        "min_seg_dur": de["min_seg_dur"],
+                        "reading_wpm": de["reading_wpm"],
+                        "min_gap_ms": de["min_gap_ms"],
+                        "wrap_width": max(100, int(de["wrap_width"])),
+                        "balance": False,
+                        "smooth": False,
+                        "preserve_timing": False
+                    })
+                    result_path = smart_translate_srt(
+                        input_path,
+                        src_lang=source_lang,
+                        tgt_lang=target_lang,
+                        provider=provider,
+                        expand_timing=True,
+                        expansion_factor=de["expansion_factor"], # 1.35
+                        min_seg_dur=de["min_seg_dur"],           # 2.2
+                        reading_wpm=de["reading_wpm"],           # 200
+                        min_gap_ms=de["min_gap_ms"],             # 120
+                        wrap_width=max(100, int(de["wrap_width"])),
+                        balance=False,
+                        smooth=False,
+                    )
+                else:
+                    # Conservative non-DE defaults
+                    result_path = smart_translate_srt(
+                        input_path,
+                        src_lang=source_lang,
+                        tgt_lang=target_lang,
+                        provider=provider,
+                        wrap_width=120,
+                        balance=False,
+                        smooth=False,
+                    )
                 debug_logger.step("OpenAI Translation SUCCESS", {"result_path": result_path})
                 debug_logger.file_info(result_path, "OpenAI translated SRT file")
+                
+                # Parse output SRT to analyze results
+                try:
+                    output_segments = self.parse_srt(result_path)
+                    debug_logger.debug("Output SRT analysis", {
+                        "total_segments": len(output_segments),
+                        "segment_count_diff": len(output_segments) - len(input_segments),
+                        "first_segment": {
+                            "index": output_segments[0]['index'] if output_segments else None,
+                            "timestamp": output_segments[0]['timestamp'] if output_segments else None,
+                            "text_preview": output_segments[0]['text'][:50] + "..." if output_segments and len(output_segments[0]['text']) > 50 else output_segments[0]['text'] if output_segments else None
+                        },
+                        "last_segment": {
+                            "index": output_segments[-1]['index'] if output_segments else None,
+                            "timestamp": output_segments[-1]['timestamp'] if output_segments else None,
+                            "text_preview": output_segments[-1]['text'][:50] + "..." if output_segments and len(output_segments[-1]['text']) > 50 else output_segments[-1]['text'] if output_segments else None
+                        }
+                    })
+                    
+                    # Timing comparison
+                    if input_segments and output_segments:
+                        debug_logger.debug("Timing comparison", {
+                            "input_first_timestamp": input_segments[0]['timestamp'],
+                            "output_first_timestamp": output_segments[0]['timestamp'],
+                            "input_last_timestamp": input_segments[-1]['timestamp'],
+                            "output_last_timestamp": output_segments[-1]['timestamp'],
+                            "timestamps_match": (
+                                input_segments[0]['timestamp'] == output_segments[0]['timestamp'] and
+                                input_segments[-1]['timestamp'] == output_segments[-1]['timestamp']
+                            )
+                        })
+                except Exception as e:
+                    debug_logger.error("Failed to analyze output SRT", e)
+                
                 return result_path
             except Exception as e:
                 debug_logger.error("OpenAI Translation FAILED", e)

@@ -30,7 +30,7 @@ class VidScalerApp:
         """
         self.root = root
         self.root.title("VidScaler - Video Skalierung")
-        self.root.geometry("600x600")
+        self.root.geometry("600x680")
         
         self.video_processor = VideoProcessor()
         self.current_video_path: Optional[str] = None
@@ -187,6 +187,33 @@ class VidScalerApp:
                        variable=self.translation_mode_var, value="dual").grid(row=0, column=0, sticky=tk.W)
         ttk.Radiobutton(mode_frame, text="Nur Übersetzung", 
                        variable=self.translation_mode_var, value="only").grid(row=0, column=1, sticky=tk.W, padx=(20, 0))
+        
+        # Deutsche Übersetzungs-Optimierung
+        optimization_frame = ttk.Frame(translation_frame)
+        optimization_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 0))
+        
+        self.de_optimization_var = tk.BooleanVar(value=False)
+        self.de_optimization_check = ttk.Checkbutton(
+            optimization_frame, 
+            text="Deutsche Übersetzung: Timing strikt beibehalten (kann Segmente verlieren)", 
+            variable=self.de_optimization_var
+        )
+        self.de_optimization_check.grid(row=0, column=0, sticky=tk.W)
+        
+        # Tooltip-artige Beschreibung  
+        optimization_info = ttk.Label(
+            optimization_frame, 
+            text="   ├─ Aus: Intelligente Timing-Expansion (empfohlen für Deutsche)",
+            font=("Arial", 8), foreground="gray"
+        )
+        optimization_info.grid(row=1, column=0, sticky=tk.W)
+        
+        optimization_info2 = ttk.Label(
+            optimization_frame, 
+            text="   └─ An: Strikte Timing-Erhaltung (Risiko: Segment-Verlust)",
+            font=("Arial", 8), foreground="gray"
+        )
+        optimization_info2.grid(row=2, column=0, sticky=tk.W)
         
         # Initial alle Übersetzungs-Widgets deaktivieren
         self._toggle_translation_widgets(False)
@@ -516,9 +543,13 @@ class VidScalerApp:
             progress_label = cfg["progress_label"]
             self.root.after(0, lambda: self.progress_var.set(f"Untertitel werden übersetzt ({progress_label})..."))
             
+            # Deutsche Übersetzungs-Optimierung
+            de_readability_optimization = self.de_optimization_var.get() and target_lang == "de"
+            
             translated_path = translator.translate_srt(
                 self.current_subtitle_path, source_lang, target_lang,
-                method=method, video_path=self.current_video_path, whisper_model=whisper_model
+                method=method, video_path=self.current_video_path, whisper_model=whisper_model,
+                de_readability_optimization=de_readability_optimization
             )
             
             self.root.after(0, lambda: self.progress_var.set("Video wird mit Untertiteln verarbeitet..."))
@@ -614,6 +645,7 @@ class VidScalerApp:
         self.source_lang_combo.config(state=state)
         self.target_lang_combo.config(state=state)
         self.method_combo.config(state=state)
+        self.de_optimization_check.config(state=state)
         if enabled and self.translation_method_var.get() == "Whisper (hochwertig)":
             self.whisper_combo.config(state="normal")
         else:

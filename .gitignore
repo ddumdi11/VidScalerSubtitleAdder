@@ -76,3 +76,6 @@ Desktop.ini
 *.swo
 *.orig
 
+# External communication and test files (not part of main project)
+docs/external/
+
