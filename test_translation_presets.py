@@ -196,6 +196,24 @@ class TestTranslationParameterApplication(unittest.TestCase):
             self.assertFalse(call_args['balance'])
             self.assertFalse(call_args['smooth'])
             
+            # Assert mock_load_env was called
+            mock_load_env.assert_called()
+            
+            # Assert result equals mocked return value
+            self.assertEqual(result, "/path/to/output.srt")
+            
+            # Negative assertions: timing modifiers should not be present for non-German
+            self.assertNotIn('timing', call_args)
+            self.assertNotIn('timing_modifiers', call_args)
+            self.assertNotIn('cut_overlap', call_args)
+            self.assertNotIn('keep_timing', call_args)
+            # expand_timing should be False or not present for conservative mode
+            if 'expand_timing' in call_args:
+                self.assertFalse(call_args['expand_timing'])
+            # preserve_timing should be False or not present for conservative mode  
+            if 'preserve_timing' in call_args:
+                self.assertFalse(call_args['preserve_timing'])
+            
         finally:
             # Cleanup
             if os.path.exists(temp_srt):
