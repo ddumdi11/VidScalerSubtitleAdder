@@ -155,6 +155,10 @@ class TestTranslationParameterApplication(unittest.TestCase):
             self.assertFalse(call_args['smooth'], "smooth should be False for STRICT mode")
             self.assertGreaterEqual(call_args['wrap_width'], 100, "wrap_width should be >= 100 for German readability")
             
+            # Lint: ensure mocks/results are exercised
+            self.assertEqual(result, "/path/to/output.srt")
+            mock_load_env.assert_called()
+            
         finally:
             # Cleanup
             if os.path.exists(temp_srt_path):

@@ -47,12 +47,12 @@ def _get_de_preset() -> DePreset:
     def _int(name: str, default: int) -> int:
         try:
             return int(os.getenv(name, str(default)))
-        except Exception:
+        except (ValueError, TypeError):
             return default
     def _float(name: str, default: float) -> float:
         try:
             return float(os.getenv(name, str(default)))
-        except Exception:
+        except (ValueError, TypeError):
             return default
 
     return {
@@ -515,7 +515,7 @@ class SubtitleTranslator:
                                         input_segments[-1]['timestamp'] == output_segments[-1]['timestamp']
                                     )
                                 })
-                        except Exception as e:
+                        except (OSError, UnicodeError, ValueError) as e:
                             debug_logger.error("Failed to analyze output SRT", e)
                         
                         return result_path
@@ -659,7 +659,7 @@ class SubtitleTranslator:
                                 input_segments[-1]['timestamp'] == output_segments[-1]['timestamp']
                             )
                         })
-                except Exception as e:
+                except (OSError, UnicodeError, ValueError) as e:
                     debug_logger.error("Failed to analyze output SRT", e)
                 
                 return result_path
