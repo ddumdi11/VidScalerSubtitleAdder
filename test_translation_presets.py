@@ -6,8 +6,7 @@ Tests verschiedene Einstellungen für deutsche Untertitel-Übersetzung
 import unittest
 import os
 import tempfile
-from unittest.mock import Mock, patch, MagicMock
-import sys
+from unittest.mock import Mock, patch
 
 # Import the translator module
 from translator import SubtitleTranslator, _get_de_preset, _get_auto_fallback_order

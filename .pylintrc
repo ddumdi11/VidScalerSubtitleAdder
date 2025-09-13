@@ -6,7 +6,7 @@ init-hook='import sys; sys.path.append(".")'
 ignore=CVS,.git,__pycache__,.venv,venv,env,build,dist,docs
 
 # Files or directories matching the regex patterns are skipped.
-ignore-patterns=test_.*\.py,.*_test\.py
+ignore-patterns=
 
 # Pickle collected data for later comparisons.
 persistent=yes
@@ -34,7 +34,6 @@ disable=
     W0212,  # protected-access (allow access to _private methods when needed)
     E1101,  # no-member (tkinter objects often have dynamic attributes)
     R0801,  # duplicate-code (some GUI patterns repeat)
-    C0301,  # line-too-long (will be handled by max-line-length)
 
 [REPORTS]
 # Set the output format. Available formats are text, parseable, colorized, json

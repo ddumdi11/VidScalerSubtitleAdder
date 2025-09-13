@@ -7,10 +7,17 @@ import re
 import sys
 import subprocess
 import tempfile
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, TypedDict
 
 # Import debug logger
 from debug_logger import debug_logger
+
+class DePreset(TypedDict):
+    wrap_width: int
+    expansion_factor: float
+    min_seg_dur: float
+    reading_wpm: int
+    min_gap_ms: int
 
 # Auto-mode fallback order helper
 def _get_auto_fallback_order() -> List[str]:
@@ -27,7 +34,7 @@ def _get_auto_fallback_order() -> List[str]:
     return [m for m in order if m in valid]
 
 # Language-aware preset for German
-def _get_de_preset() -> Dict[str, object]:
+def _get_de_preset() -> DePreset:
     """Return DE-friendly preset parameters (can be overridden via env).
 
     Env overrides:
@@ -49,7 +56,7 @@ def _get_de_preset() -> Dict[str, object]:
             return default
 
     return {
-        "wrap_width": _int("SRT_DE_WRAP", 120),
+        "wrap_width": max(100, _int("SRT_DE_WRAP", 120)),
         "expansion_factor": _float("SRT_DE_EXPANSION_FACTOR", 1.35),
         "min_seg_dur": _float("SRT_DE_MIN_SEG_DUR", 2.2),
         "reading_wpm": _int("SRT_DE_READING_WPM", 200),
@@ -364,6 +371,7 @@ class SubtitleTranslator:
         debug_logger.file_info(input_path, "Input SRT file")
         
         # Parse input SRT to get segment info for debugging
+        input_segments: List[Dict] = []
         try:
             input_segments = self.parse_srt(input_path)
             debug_logger.debug("Input SRT analysis", {
@@ -379,7 +387,7 @@ class SubtitleTranslator:
                     "text_preview": input_segments[-1]['text'][:50] + "..." if input_segments and len(input_segments[-1]['text']) > 50 else input_segments[-1]['text'] if input_segments else None
                 }
             })
-        except Exception as e:
+        except (OSError, UnicodeError, ValueError) as e:
             debug_logger.error("Failed to parse input SRT for analysis", e)
         
         # Log availability flags

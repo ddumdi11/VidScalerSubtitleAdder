@@ -361,7 +361,9 @@ class AudioTranscriber:
             title="SRT-Datei speichern",
             defaultextension=".srt",
             filetypes=[("SRT-Dateien", "*.srt"), ("Alle Dateien", "*.*")],
-            initialfile=default_srt_name
+            initialfile=default_srt_name,
+            initialdir=os.path.dirname(self.video_path),
+            confirmoverwrite=True
         )
         
         if not filename:
