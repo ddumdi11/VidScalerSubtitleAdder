@@ -352,11 +352,18 @@ class AudioTranscriber:
             messagebox.showerror("Fehler", "Keine Transkription verfügbar.")
             return
             
-        # Datei-Dialog für Speicherort
+        # Datei-Dialog für Speicherort mit Video-basiertem Standard-Namen
+        video_basename = os.path.basename(self.video_path)
+        video_name_without_ext = os.path.splitext(video_basename)[0]
+        default_srt_name = f"{video_name_without_ext}.srt"
+        
         filename = filedialog.asksaveasfilename(
             title="SRT-Datei speichern",
             defaultextension=".srt",
-            filetypes=[("SRT-Dateien", "*.srt"), ("Alle Dateien", "*.*")]
+            filetypes=[("SRT-Dateien", "*.srt"), ("Alle Dateien", "*.*")],
+            initialfile=default_srt_name,
+            initialdir=os.path.dirname(self.video_path),
+            confirmoverwrite=True
         )
         
         if not filename:
