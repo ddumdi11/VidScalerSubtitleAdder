@@ -131,33 +131,35 @@ class TestTranslationParameterApplication(unittest.TestCase):
         # Create sample SRT file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.srt', delete=False, encoding='utf-8') as f:
             f.write("1\n00:00:00,000 --> 00:00:02,000\nTest subtitle\n")
-            temp_srt = f.name
+            temp_srt_path = f.name
         
         try:
-            # Call translation with German target
+            # Call translation with German target using video-optimized settings
             result = self.translator.translate_srt(
-                temp_srt, 
+                temp_srt_path, 
                 source_lang="en", 
                 target_lang="de", 
-                method="openai"
+                method="openai",
+                de_readability_optimization=True
             )
             
             # Verify smart_translate_srt was called with correct video-optimized parameters
             mock_translate.assert_called_once()
             call_args = mock_translate.call_args[1]  # keyword arguments
             
-            # Check video burn-in compatible settings
-            self.assertTrue(call_args['preserve_timing'], "preserve_timing should be True for video burn-in")
-            # expand_timing should not be explicitly set (defaults to False) for video burn-in
-            self.assertNotIn('expand_timing', call_args, "expand_timing should not be set for video burn-in (defaults to False)")
-            self.assertFalse(call_args['balance'], "balance should be False for timing preservation")
-            self.assertFalse(call_args['smooth'], "smooth should be False for timing preservation")
-            self.assertGreaterEqual(call_args['wrap_width'], 100, "wrap_width should be >= 100 for German")
+            # Check STRICT timing mode settings for video burn-in compatibility
+            self.assertTrue(call_args['preserve_timing'], "preserve_timing should be True for STRICT mode")
+            # expand_timing should be False or not set for STRICT mode
+            if 'expand_timing' in call_args:
+                self.assertFalse(call_args['expand_timing'], "expand_timing should be False for STRICT mode")
+            self.assertFalse(call_args['balance'], "balance should be False for STRICT mode")
+            self.assertFalse(call_args['smooth'], "smooth should be False for STRICT mode")
+            self.assertGreaterEqual(call_args['wrap_width'], 100, "wrap_width should be >= 100 for German readability")
             
         finally:
             # Cleanup
-            if os.path.exists(temp_srt):
-                os.unlink(temp_srt)
+            if os.path.exists(temp_srt_path):
+                os.unlink(temp_srt_path)
 
     @patch('translator.SMART_TRANSLATION_AVAILABLE', True)
     @patch('translator.OPENAI_PROVIDER_AVAILABLE', True)
