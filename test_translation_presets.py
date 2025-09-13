@@ -183,7 +183,8 @@ class TestTranslationParameterApplication(unittest.TestCase):
                 temp_srt, 
                 source_lang="de", 
                 target_lang="en", 
-                method="openai"
+                method="openai",
+                de_readability_optimization=False
             )
             
             # Verify smart_translate_srt was called with conservative settings

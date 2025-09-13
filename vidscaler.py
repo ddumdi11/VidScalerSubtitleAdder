@@ -543,8 +543,11 @@ class VidScalerApp:
             progress_label = cfg["progress_label"]
             self.root.after(0, lambda: self.progress_var.set(f"Untertitel werden übersetzt ({progress_label})..."))
             
-            # Deutsche Übersetzungs-Optimierung
-            de_readability_optimization = self.de_optimization_var.get() and target_lang == "de"
+            # Deutsche Übersetzungs-Optimierung (nur für OpenAI/Auto + de)
+            is_openai_method = method in ["openai", "auto"]
+            de_readability_optimization = (self.de_optimization_var.get() and 
+                                         target_lang == "de" and 
+                                         is_openai_method)
             
             translated_path = translator.translate_srt(
                 self.current_subtitle_path, source_lang, target_lang,

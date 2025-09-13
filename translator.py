@@ -765,5 +765,5 @@ if __name__ == "__main__":
         target_lang = sys.argv[3]
         
         print(f"Übersetze {input_file} von {source_lang} nach {target_lang}...")
-        output_file = translator.translate_srt(input_file, source_lang, target_lang)
+        output_file = translator.translate_srt(input_file, source_lang, target_lang, de_readability_optimization=False)
         print(f"Übersetzung gespeichert: {output_file}")
