@@ -380,23 +380,33 @@ class AudioTranscriber:
                 duration = end_time - start_time
 
                 cmd = [
-                    # FFmpeg ausführen
--                    subprocess.run(
--                        cmd,
--                        capture_output=True,
--                        text=True,
--                        shell=False,
--                        timeout=30,  # 30 Sekunden Timeout
--                        **SUBPROCESS_FLAGS
-                    result = subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        shell=False,
-                        timeout=30,  # 30 Sekunden Timeout
-                        **SUBPROCESS_FLAGS,
-                        check=False,
-                    )
+                    "ffmpeg",
+                    "-nostdin",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-ss",
+                    f"{start_time:.3f}",
+                    "-t",
+                    f"{duration:.3f}",
+                    "-i",
+                    self.temp_audio_path,
+                    "-vn",
+                    "-y",
+                    "-acodec",
+                    "copy",
+                    segment_path,
+                ]
+
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    shell=False,
+                    timeout=30,  # 30 Sekunden Timeout
+                    **SUBPROCESS_FLAGS,
+                    check=False,
+                )
                     if result.returncode != 0:
                         messagebox.showerror(
                             "Fehler",
