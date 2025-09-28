@@ -79,3 +79,6 @@ Desktop.ini
 # External communication and test files (not part of main project)
 /docs/external/
 
+# Kilo Code workspace (AI assistant working files)
+.kilo/
+
