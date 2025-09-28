@@ -421,10 +421,14 @@ class AudioTranscriber:
                     play_cmd = [
                         "ffplay", "-nodisp", "-autoexit", segment_path
                     ]
+                    play_thread = threading.Thread(
+                        target=self._play_with_ffplay,
+                        args=(play_cmd, segment_path),
+                        daemon=True,
+                    )
+                    play_thread.start()
             except Exception as e:
                 messagebox.showerror("Fehler", f"Audio konnte nicht abgespielt werden:\n{str(e)}")
-
-    def _play_with_ffplay(self, cmd, segment_path):
         """Spielt Audio mit ffplay ab und bereinigt temporäre Datei"""
         try:
             subprocess.run(cmd, **SUBPROCESS_FLAGS)
