@@ -14,7 +14,7 @@ Activate:
 PowerShell: .venv\Scripts\Activate.ps1
 CMD: .venv\Scripts\activate.bat
 bash/zsh: source .venv/bin/activate
-Install (local): python -m pip install -e .[openai] (omit [openai] to skip OpenAI extra)
+Install: pip install smart-srt-translator[openai] (omit [openai] to skip OpenAI extra)
 Translate (CLI):
 Smart (default): srt-translate translate Sample/firstdayinnewhospital.srt en de
 Provider is openai by default; mode smart by default.
