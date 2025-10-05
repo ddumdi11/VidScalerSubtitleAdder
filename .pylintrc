@@ -27,11 +27,13 @@ disable=
     C0103,  # invalid-name (allow short variable names like 'x', 'i')
     C0114,  # missing-module-docstring
     C0115,  # missing-class-docstring
+    C0115,  # missing-class-docstring
     C0116,  # missing-function-docstring
     R0903,  # too-few-public-methods
     R0913,  # too-many-arguments (GUI callbacks often need many args)
     W0613,  # unused-argument (common in GUI event handlers)
     W0212,  # protected-access (allow access to _private methods when needed)
+    E1101,  # no-member (tkinter objects often have dynamic attributes)
     R0801,  # duplicate-code (some GUI patterns repeat)
 
 [REPORTS]
