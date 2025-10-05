@@ -33,7 +33,7 @@ except ImportError as e:
     MISSING_DEPS = str(e)
 
 
-class AudioSegment:
+class TranscriptionSegment:
     """Repräsentiert ein Audio-Segment mit Transkription"""
     def __init__(self, start: float, end: float, text: str):
         self.start = start
@@ -49,7 +49,7 @@ class AudioTranscriber:
             
         self.video_path = video_path
         self.subtitle_var = subtitle_var
-        self.audio_segments: List[AudioSegment] = []
+        self.audio_segments: List[TranscriptionSegment] = []
         self.temp_audio_path = None
         self.whisper_model = None
         self.audio_data = None
@@ -171,6 +171,7 @@ class AudioTranscriber:
         
         # Bind events
         self.segments_tree.bind("<<TreeviewSelect>>", self.on_segment_select)
+        self.segments_tree.bind("<Double-Button-1>", self.on_segment_double_click)
         
         # Grid configuration
         main_frame.columnconfigure(0, weight=1)
@@ -286,9 +287,9 @@ class AudioTranscriber:
             # Segmente extrahieren
             self.audio_segments = []
             for segment in result["segments"]:
-                audio_seg = AudioSegment(
+                audio_seg = TranscriptionSegment(
                     start=segment["start"],
-                    end=segment["end"], 
+                    end=segment["end"],
                     text=segment["text"].strip()
                 )
                 self.audio_segments.append(audio_seg)
@@ -327,6 +328,14 @@ class AudioTranscriber:
                 segment = self.audio_segments[index]
                 self.edit_text.delete(1.0, tk.END)
                 self.edit_text.insert(1.0, segment.text)
+
+    def on_segment_double_click(self, event):
+        """Wird aufgerufen bei Doppelklick auf ein Segment - spielt Audio ab"""
+        selection = self.segments_tree.selection()
+        if selection:
+            item = selection[0]
+            index = self.segments_tree.index(item)
+            self.play_audio_segment(index)
                 
     def update_segment(self):
         """Aktualisiert das ausgewählte Segment"""
@@ -334,17 +343,91 @@ class AudioTranscriber:
         if not selection:
             messagebox.showwarning("Warnung", "Bitte wählen Sie ein Segment aus.")
             return
-            
+
         item = selection[0]
         index = self.segments_tree.index(item)
         if 0 <= index < len(self.audio_segments):
             new_text = self.edit_text.get(1.0, tk.END).strip()
             self.audio_segments[index].text = new_text
             self.audio_segments[index].edited = True
-            
+
             # TreeView aktualisieren
             time_str = f"{self._format_time(self.audio_segments[index].start)} - {self._format_time(self.audio_segments[index].end)}"
             self.segments_tree.item(item, values=(time_str, new_text))
+
+    def play_audio_segment(self, index: int):
+        """Spielt das Audio-Segment für den gegebenen Index ab"""
+        if not self.temp_audio_path or not os.path.exists(self.temp_audio_path):
+            messagebox.showerror("Fehler", "Audio-Datei nicht verfügbar. Bitte extrahieren Sie zuerst das Audio.")
+            return
+
+        if 0 <= index < len(self.audio_segments):
+            segment = self.audio_segments[index]
+            try:
+                # Temporäre Datei für das Segment erstellen
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                    segment_path = temp_file.name
+
+                # FFmpeg verwenden, um das Segment zu extrahieren
+                # Puffer von 50ms vorne und hinten für sanftere Übergänge
+                buffer_ms = 0.050  # 50 Millisekunden
+                start_time = max(0, segment.start - buffer_ms)  # Nicht vor 0 gehen
+                end_time = segment.end + buffer_ms
+
+                # Sicherstellen, dass end_time nicht über die Audio-Länge hinausgeht
+                # (Wir kennen die Audio-Länge nicht genau, aber FFmpeg handhabt das)
+                duration = end_time - start_time
+
+                cmd = [
+                    "ffmpeg", "-nostdin", "-i", self.temp_audio_path,
+                    "-ss", str(start_time),  # Startzeit
+                    "-t", str(duration),     # Dauer
+                    "-c", "copy",            # Kopieren ohne Rekodierung
+                    "-y",                    # Überschreiben
+                    segment_path
+                ]
+
+                # FFmpeg ausführen
+                subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    shell=False,
+                    timeout=30,  # 30 Sekunden Timeout
+                    **SUBPROCESS_FLAGS
+                )
+
+                # Segment mit ffplay abspielen (asynchron)
+                play_cmd = [
+                    "ffplay", "-nodisp", "-autoexit", segment_path
+                ]
+
+                # Asynchron abspielen
+                threading.Thread(
+                    target=self._play_with_ffplay,
+                    args=(play_cmd, segment_path),
+                    daemon=True
+                ).start()
+
+            except subprocess.TimeoutExpired:
+                messagebox.showerror("Fehler", "Audio-Extraktion timeout - Segment möglicherweise zu groß")
+            except Exception as e:
+                messagebox.showerror("Fehler", f"Audio konnte nicht abgespielt werden:\n{str(e)}")
+    
+    def _play_with_ffplay(self, cmd, segment_path):
+        """Spielt Audio mit ffplay ab und bereinigt temporäre Datei"""
+        try:
+            subprocess.run(cmd, **SUBPROCESS_FLAGS)
+        except Exception as e:
+            print(f"ffplay error: {e}")
+        finally:
+            # Temporäre Datei löschen
+            try:
+                if os.path.exists(segment_path):
+                    os.remove(segment_path)
+            except:
+                pass
             
     def export_srt(self):
         """Exportiert die Transkription als SRT-Datei"""
