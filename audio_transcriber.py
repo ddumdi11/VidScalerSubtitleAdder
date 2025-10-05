@@ -380,55 +380,42 @@ class AudioTranscriber:
                 duration = end_time - start_time
 
                 cmd = [
-                    "ffmpeg",
-                    "-nostdin",
-                    "-hide_banner",
-                    "-loglevel",
-                    "error",
-                    "-ss",
-                    f"{start_time:.3f}",
-                    "-t",
-                    f"{duration:.3f}",
-                    "-i",
-                    self.temp_audio_path,
-                    "-vn",
-                    "-y",
-                    "-acodec",
-                    "copy",
-                    segment_path,
+                    "ffmpeg", "-nostdin", "-i", self.temp_audio_path,
+                    "-ss", str(start_time),  # Startzeit
+                    "-t", str(duration),     # Dauer
+                    "-c", "copy",            # Kopieren ohne Rekodierung
+                    "-y",                    # Überschreiben
+                    segment_path
                 ]
 
-                result = subprocess.run(
+                # FFmpeg ausführen
+                subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
                     shell=False,
                     timeout=30,  # 30 Sekunden Timeout
-                    **SUBPROCESS_FLAGS,
-                    check=False,
+                    **SUBPROCESS_FLAGS
                 )
-                    if result.returncode != 0:
-                        messagebox.showerror(
-                            "Fehler",
-                            f"FFmpeg konnte das Segment nicht extrahieren "
-                            f"(Exit Code {result.returncode}):\n{result.stderr or 'Kein Fehlerausgabe'}"
-                        )
-                        if os.path.exists(segment_path):
-                            os.remove(segment_path)
-                        return
 
-                    # Segment mit ffplay abspielen (asynchron)
-                    play_cmd = [
-                        "ffplay", "-nodisp", "-autoexit", segment_path
-                    ]
-                    play_thread = threading.Thread(
-                        target=self._play_with_ffplay,
-                        args=(play_cmd, segment_path),
-                        daemon=True,
-                    )
-                    play_thread.start()
+                # Segment mit ffplay abspielen (asynchron)
+                play_cmd = [
+                    "ffplay", "-nodisp", "-autoexit", segment_path
+                ]
+
+                # Asynchron abspielen
+                threading.Thread(
+                    target=self._play_with_ffplay,
+                    args=(play_cmd, segment_path),
+                    daemon=True
+                ).start()
+
+            except subprocess.TimeoutExpired:
+                messagebox.showerror("Fehler", "Audio-Extraktion timeout - Segment möglicherweise zu groß")
             except Exception as e:
                 messagebox.showerror("Fehler", f"Audio konnte nicht abgespielt werden:\n{str(e)}")
+    
+    def _play_with_ffplay(self, cmd, segment_path):
         """Spielt Audio mit ffplay ab und bereinigt temporäre Datei"""
         try:
             subprocess.run(cmd, **SUBPROCESS_FLAGS)
