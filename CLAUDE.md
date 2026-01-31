@@ -64,8 +64,10 @@ VidScaler/
 5. **Progress Feedback**: Status-Updates für Benutzer
 6. **✅ Subtitle Integration**: .srt-Dateien unterhalb des Videos einbrennen
 7. **✅ Audio Transcription**: Video → Audio → Text → SRT mit Whisper
-8. **🆕 Translation Engine**: SRT-Übersetzung mit mehreren Sprachen
-9. **🆕 Dual Subtitles**: Original oben, Übersetzung unten im Video
+8. **✅ Translation Engine**: SRT-Übersetzung mit mehreren Sprachen
+9. **✅ Dual Subtitles**: Original oben, Übersetzung unten im Video
+10. **✅ Smart Split**: Videos in Teile splitten mit konfigurierbarer Überlappung
+11. **✅ UI-Vereinfachung**: 4 klare Aktions-Buttons, kompakte Übersetzungs-Sektion, Tooltips
 
 ## FFmpeg Integration
 **Normale Skalierung:**
@@ -137,11 +139,14 @@ pip install --index-url https://test.pypi.org/simple/ smart-srt-translator
 - **✅ Robustes Cleanup**: Automatische Bereinigung aller temporären Audio-Dateien
 - **🔄 Qualitäts-Test**: Whisper-Übersetzung braucht noch Feintuning/manuelle Nachbearbeitung
 
-## 🔄 Workflow (Phase 4)
+## 🔄 Workflow (aktuell)
 1. **Video auswählen** → Analysieren
-2. **Audio transkribieren** → SRT wird automatisch gesetzt 
-3. **Übersetzung aktivieren** → Sprachen + **Methode** wählen → Modus wählen
-4. **"Mit Übersetzung skalieren"** → Fertig!
+2. **Audio transkribieren** → SRT wird automatisch gesetzt
+3. **Sprache + Methode** wählen (Übersetzungs-Sektion, immer sichtbar)
+4. **Button wählen:**
+   - "Mit Original-Untertiteln" → Original-SRT unten im Video
+   - "Mit Übersetzung" → Nur übersetzte Untertitel unten
+   - "Mit Original + Übersetzung" → Original oben, Übersetzung unten
 
 ## 🎉 Phase 5 Features (Production Quality & UX) - ✅ FERTIG!
 - **✅ Smart-SRT-Translator Integration**: Lokales `smart_translation.py` durch PyPI-Modul ersetzt
@@ -149,7 +154,53 @@ pip install --index-url https://test.pypi.org/simple/ smart-srt-translator
 - **✅ Benutzerfreundlichkeit**: Alle Standard-Einstellungen auf häufigste Use-Cases optimiert
 - **✅ Modular Architecture**: Externe Dependencies über offizielle Package-Manager
 
-## 📋 Phase 6 Roadmap (Future)
+## 🎬 Phase 6 Features (Smart Split) - ✅ LIVE GETESTET!
+- **✅ Video-Splitting**: Automatisches Aufteilen in konfigurierbare Segmente
+- **✅ Überlappung**: Einstellbare Sekunden-Überlappung zwischen Teilen (für nahtlose Übergänge)
+- **✅ GUI-Integration**: Checkbox + Spinboxen für Teillänge (1-60 min) und Überlappung (0-30 sek)
+- **✅ Stream-Copy**: Schnelles Splitting ohne Re-Encoding (`-c copy`)
+- **✅ Workflow-Integration**: Split erfolgt automatisch nach Skalierung/Untertitel/Übersetzung
+- **✅ Smart Detection**: Kein Split wenn Video kürzer als gewählte Teillänge
+- **✅ Erfolgsmeldung**: Liste aller erstellten Teile in der Bestätigung
+
+### Smart Split FFmpeg-Befehl
+```bash
+ffmpeg -ss START -i input.mp4 -to DURATION -c copy -avoid_negative_ts make_zero output_partXX.mp4
+```
+
+### Segment-Berechnung (Beispiel: 30 Min Video, 5 Min Teile, 2 Sek Overlap)
+| Teil | Start | Ende | Effektive Länge |
+|------|-------|------|-----------------|
+| 1 | 0:00 | 5:02 | 5:02 |
+| 2 | 5:00 | 10:02 | 5:02 |
+| 3 | 10:00 | 15:02 | 5:02 |
+| ... | ... | ... | ... |
+
+## 🎨 Phase 7 Features (UI-Vereinfachung) - ✅ IMPLEMENTIERT!
+- **✅ Button-Vereinfachung**: 4 klare Aktions-Buttons statt verwirrender Checkbox/Radio-Logik
+  - "Video skalieren" (nur Skalierung)
+  - "Mit Original-Untertiteln" (Original-SRT unten)
+  - "Mit Übersetzung" (nur übersetzte Untertitel unten, Fix für Issue #6)
+  - "Mit Original + Übersetzung" (Original oben, Übersetzung unten)
+- **✅ Übersetzungs-Sektion vereinfacht**: Kompakte Zeile (Von/Nach/Methode) statt verschachtelter Frames
+- **✅ Checkbox "Übersetzung aktivieren" entfernt**: Nicht mehr nötig, Button-Wahl bestimmt Modus
+- **✅ Radio-Buttons entfernt**: Modus wird durch Button-Wahl bestimmt
+- **✅ Tooltip-System**: ToolTip-Klasse in utils.py für Timing-Checkbox
+- **✅ Debug-Code bereinigt**: ASS-Kopien und FFmpeg-Debug-Print entfernt
+- **✅ _ensure_wrapstyle**: Fehlender Aufruf im "Nur Übersetzung"-Branch hinzugefügt
+- **✅ Issue #6 gelöst**: "Nur Übersetzung"-Modus verwendet jetzt `subtitles=` statt `ass=` Filter. Doppelte Untertitel waren VLC Auto-Load-Verhalten (keine Code-Bug)
+
+### Hinweis: VLC Auto-Load Verhalten
+
+VLC lädt automatisch externe Untertitel-Dateien, wenn sie denselben Basisnamen wie das Video haben. Wenn `_translated.mp4` im selben Ordner wie eine `_translated.srt` abgespielt wird, zeigt VLC die Untertitel möglicherweise doppelt an.
+
+**Lösungen:**
+
+- Video in einen anderen Ordner verschieben
+- SRT-Datei umbenennen/verschieben
+- In VLC: Untertitel > Unterspur > Deaktivieren
+
+## 📋 Phase 8 Roadmap (Future)
 - **🎯 Translation Editor**: GUI-Fenster zum manuellen Korrigieren von Übersetzungen
 - **📝 Segment-by-Segment Editing**: Wie AudioTranscriber, aber für übersetzte Texte
 - **🔄 Export-Integration**: Korrigierte Übersetzung direkt in Video-Pipeline

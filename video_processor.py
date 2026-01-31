@@ -168,8 +168,8 @@ class VideoProcessor:
     def get_ffmpeg_version(self) -> str:
         """Gibt FFmpeg-Version zurück"""
         try:
-            result = subprocess.run([self.ffmpeg_path, '-nostdin', '-hide_banner', '-loglevel', 'error', '-version'], 
-                                 capture_output=True, text=True, shell=False, 
+            result = subprocess.run([self.ffmpeg_path, '-nostdin', '-hide_banner', '-loglevel', 'error', '-version'],
+                                 capture_output=True, text=True, shell=False,
                                  timeout=FFMPEG_TIMEOUT_SHORT, check=True, **SUBPROCESS_FLAGS)
             # Erste Zeile enthält Version
             first_line = result.stdout.split('\n')[0]
@@ -177,7 +177,113 @@ class VideoProcessor:
         except Exception:
             logging.exception("FFmpeg version check failed")
             return "Unbekannt"
-            
+
+    def get_video_duration(self, video_path: str) -> float:
+        """Ermittelt Video-Dauer in Sekunden mit ffprobe"""
+        try:
+            ffprobe_path = shutil.which('ffprobe') or 'ffprobe'
+            cmd = [
+                ffprobe_path,
+                '-v', 'error',
+                '-show_entries', 'format=duration',
+                '-of', 'csv=p=0',
+                os.path.abspath(video_path)
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True, shell=False,
+                                  timeout=FFMPEG_TIMEOUT_SHORT, check=True, **SUBPROCESS_FLAGS)
+
+            duration = float(result.stdout.strip())
+            return duration
+
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Konnte Video-Dauer nicht ermitteln: {e.stderr or str(e)}") from e
+        except ValueError as e:
+            raise RuntimeError(f"Ungültige Dauer-Angabe: {e}") from e
+
+    def split_video(self, input_path: str, segment_minutes: int = 5, overlap_seconds: int = 2) -> list:
+        """
+        Splittet Video in Teile mit Überlappung.
+
+        Args:
+            input_path: Pfad zum Video
+            segment_minutes: Länge jedes Segments in Minuten
+            overlap_seconds: Überlappung zwischen Segmenten in Sekunden
+
+        Returns:
+            Liste der erstellten Dateipfade
+        """
+        try:
+            # Video-Dauer ermitteln
+            duration = self.get_video_duration(input_path)
+            segment_seconds = segment_minutes * 60
+
+            # Kein Split nötig wenn Video kürzer als Segment-Länge
+            if duration <= segment_seconds:
+                logging.info(f"Video ({duration:.1f}s) kürzer als Segment-Länge ({segment_seconds}s) - kein Split")
+                return []
+
+            # Basis-Pfad für Output-Dateien
+            name, ext = os.path.splitext(input_path)
+
+            # Segmente berechnen und erstellen
+            output_paths = []
+            part_num = 1
+            start_time = 0.0
+
+            while start_time < duration:
+                # Ende berechnen (mit Overlap für nächstes Segment)
+                end_time = min(start_time + segment_seconds + overlap_seconds, duration)
+
+                # Letztes Segment: kein extra Overlap am Ende nötig
+                if end_time >= duration:
+                    end_time = duration
+
+                # Output-Pfad
+                output_path = f"{name}_part{part_num:02d}{ext}"
+
+                # Zeit-Strings für FFmpeg (HH:MM:SS.mmm)
+                start_str = self._seconds_to_timestamp(start_time)
+                end_str = self._seconds_to_timestamp(end_time)
+
+                # FFmpeg-Befehl: -ss vor -i für schnelles Seeking, -c copy für Stream-Copy
+                cmd = [
+                    self.ffmpeg_path, '-nostdin', '-hide_banner', '-loglevel', 'error',
+                    '-ss', start_str,
+                    '-i', input_path,
+                    '-to', self._seconds_to_timestamp(end_time - start_time),  # Relative Dauer
+                    '-c', 'copy',
+                    '-avoid_negative_ts', 'make_zero',
+                    '-y',
+                    output_path
+                ]
+
+                subprocess.run(cmd, capture_output=True, text=True, shell=False,
+                             timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
+
+                if os.path.exists(output_path):
+                    output_paths.append(output_path)
+                    logging.info(f"Split erstellt: {output_path} ({start_str} - {end_str})")
+
+                # Nächstes Segment: Start = vorheriges Ende minus Overlap
+                start_time = start_time + segment_seconds
+                part_num += 1
+
+            return output_paths
+
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"FFmpeg-Fehler beim Splitting: {e.stderr or str(e)}") from e
+        except Exception as e:
+            logging.exception("Fehler beim Video-Splitting")
+            raise RuntimeError(f"Fehler beim Video-Splitting: {e}") from e
+
+    def _seconds_to_timestamp(self, seconds: float) -> str:
+        """Konvertiert Sekunden zu FFmpeg-Timestamp (HH:MM:SS.mmm)"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{secs:06.3f}"
+
     def scale_video_with_subtitles(self, input_path: str, output_path: str, new_width: int, subtitle_path: str):
         """Skaliert Video und brennt Untertitel unterhalb des Videos ein"""
         temp_subtitle_abs = None
@@ -335,26 +441,23 @@ class VideoProcessor:
                 cmd = [self.ffmpeg_path, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
 
             else:
-                # Nur Übersetzung unten
+                # Nur Übersetzung unten – gleicher Ansatz wie scale_video_with_subtitles:
+                # SRT direkt mit subtitles= Filter (rendert nach Padding im schwarzen Balken)
                 bot_pad = 100
                 cwd = os.getcwd()
                 temp_translated_srt = os.path.join(cwd, "temp_subtitles.srt")
                 shutil.copy2(translated_subtitle_path, temp_translated_srt)
-                temp_translated_ass = os.path.join(cwd, "temp_subtitles.ass")
-
-                _convert_srt_to_ass(temp_translated_srt, temp_translated_ass)
-                _tweak_ass_style(temp_translated_ass, alignment=2, margin_v=12)
 
                 vf = (
                     f"scale={new_width}:-2,"
                     f"pad=iw:ih+{bot_pad}:0:0:black,"
-                    f"ass=filename={os.path.basename(temp_translated_ass)}"
+                    f"subtitles={os.path.basename(temp_translated_srt)}:charenc=UTF-8"
                 )
 
                 cmd = [self.ffmpeg_path, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
 
             # Ausführen (hardened with timeout)
-            subprocess.run(cmd, capture_output=True, text=True, shell=False, 
+            subprocess.run(cmd, capture_output=True, text=True, shell=False,
                          timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
 
             if not os.path.exists(output_path):

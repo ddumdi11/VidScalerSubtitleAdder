@@ -9,7 +9,7 @@ from typing import Optional, List, Tuple
 import threading
 
 from video_processor import VideoProcessor
-from utils import get_video_info, generate_scaling_options
+from utils import get_video_info, generate_scaling_options, ToolTip
 
 # Translation method mapping for maintainability and localization
 TRANSLATION_METHODS = {
@@ -42,17 +42,18 @@ class VidScalerApp:
     def setup_ui(self):
         """
         Builds the application's main tkinter user interface and initializes all widgets and their callbacks.
-        
+
         Creates sections and widgets for:
         - video selection (file entry + browse),
         - video info (resolution label),
         - scaling options (width combobox),
         - subtitles (subtitle path entry, browse, audio transcription, text excerpt),
-        - optional translation (enable checkbox, source/target language selectors, translation method and whisper model selector, translation mode radio buttons),
-        - action buttons (analyze, scale, scale with subtitles, scale with translation),
+        - translation settings (source/target language, method, timing optimization),
+        - smart split (enable, segment length, overlap),
+        - action buttons (analyze, scale, original subtitles, translation only, dual subtitles),
         - progress label and indeterminate progress bar.
-        
-        Translation-related widgets are initially disabled; the subtitle path variable is traced to update UI state when changed. Widgets are laid out using ttk and grid geometry.
+
+        The subtitle path variable is traced to update button states when changed.
         """
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -127,120 +128,117 @@ class VidScalerApp:
         
         subtitle_frame.columnconfigure(0, weight=1)
         
-        # Übersetzungs-Sektion
+        # Übersetzungs-Sektion (kompakt)
         ttk.Label(main_frame, text="Übersetzung (optional):", font=("Arial", 12, "bold")).grid(
             row=8, column=0, sticky=tk.W, pady=(15, 5)
         )
-        
+
         translation_frame = ttk.Frame(main_frame)
         translation_frame.grid(row=9, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
-        
-        # Übersetzung aktivieren Checkbox
-        self.translate_enabled_var = tk.BooleanVar()
-        ttk.Checkbutton(translation_frame, text="Übersetzung aktivieren", 
-                       variable=self.translate_enabled_var,
-                       command=self._on_translation_toggle).grid(row=0, column=0, sticky=tk.W, pady=(0, 10))
-        
-        # Sprachauswahl
-        lang_frame = ttk.Frame(translation_frame)
-        lang_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
-        
-        ttk.Label(lang_frame, text="Von:").grid(row=0, column=0, sticky=tk.W)
+
+        # Kompakte Zeile: Von [xx] Nach [xx] Methode [xx]
+        ttk.Label(translation_frame, text="Von:").grid(row=0, column=0, sticky=tk.W)
         self.source_lang_var = tk.StringVar(value="en")
-        self.source_lang_combo = ttk.Combobox(lang_frame, textvariable=self.source_lang_var, 
-                                            width=12, state="readonly")
+        self.source_lang_combo = ttk.Combobox(translation_frame, textvariable=self.source_lang_var,
+                                            width=8, state="readonly")
         self.source_lang_combo['values'] = ["auto", "de", "en", "fr", "es", "it", "pt", "ru", "zh"]
-        self.source_lang_combo.grid(row=0, column=1, sticky=tk.W, padx=(5, 15))
-        
-        ttk.Label(lang_frame, text="Nach:").grid(row=0, column=2, sticky=tk.W)
+        self.source_lang_combo.grid(row=0, column=1, sticky=tk.W, padx=(5, 10))
+
+        ttk.Label(translation_frame, text="Nach:").grid(row=0, column=2, sticky=tk.W)
         self.target_lang_var = tk.StringVar(value="de")
-        self.target_lang_combo = ttk.Combobox(lang_frame, textvariable=self.target_lang_var, 
-                                            width=12, state="readonly")
+        self.target_lang_combo = ttk.Combobox(translation_frame, textvariable=self.target_lang_var,
+                                            width=8, state="readonly")
         self.target_lang_combo['values'] = ["de", "en", "fr", "es", "it", "pt", "ru", "zh"]
-        self.target_lang_combo.grid(row=0, column=3, sticky=tk.W, padx=(5, 0))
-        
-        # Übersetzungsmethode
-        method_frame = ttk.Frame(translation_frame)
-        method_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
-        
-        ttk.Label(method_frame, text="Methode:").grid(row=0, column=0, sticky=tk.W)
+        self.target_lang_combo.grid(row=0, column=3, sticky=tk.W, padx=(5, 10))
+
+        ttk.Label(translation_frame, text="Methode:").grid(row=0, column=4, sticky=tk.W)
         self.translation_method_var = tk.StringVar(value="OpenAI (beste Qualität)")
-        self.method_combo = ttk.Combobox(method_frame, textvariable=self.translation_method_var, 
+        self.method_combo = ttk.Combobox(translation_frame, textvariable=self.translation_method_var,
                                        width=20, state="readonly")
         self.method_combo['values'] = list(TRANSLATION_METHODS.keys())
         self.method_combo.bind('<<ComboboxSelected>>', self._on_method_change)
-        self.method_combo.grid(row=0, column=1, sticky=tk.W, padx=(5, 15))
-        
-        # Whisper-Modell-Auswahl (initial versteckt)
+        self.method_combo.grid(row=0, column=5, sticky=tk.W, padx=(5, 0))
+
+        # Whisper-Modell-Auswahl (initial versteckt, erscheint bei Whisper-Auswahl)
         self.whisper_model_var = tk.StringVar(value="base")
-        self.whisper_label = ttk.Label(method_frame, text="Modell:")
-        self.whisper_combo = ttk.Combobox(method_frame, textvariable=self.whisper_model_var, 
+        self.whisper_label = ttk.Label(translation_frame, text="Modell:")
+        self.whisper_combo = ttk.Combobox(translation_frame, textvariable=self.whisper_model_var,
                                         width=12, state="readonly")
         self.whisper_combo['values'] = ["tiny (schnell)", "base (empfohlen)", "small (genau)"]
-        
-        # Übersetzungsmodus
-        mode_frame = ttk.Frame(translation_frame)
-        mode_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E))
-        
-        self.translation_mode_var = tk.StringVar(value="dual")
-        ttk.Radiobutton(mode_frame, text="Original oben, Übersetzung unten", 
-                       variable=self.translation_mode_var, value="dual").grid(row=0, column=0, sticky=tk.W)
-        ttk.Radiobutton(mode_frame, text="Nur Übersetzung", 
-                       variable=self.translation_mode_var, value="only").grid(row=0, column=1, sticky=tk.W, padx=(20, 0))
-        
-        # Deutsche Übersetzungs-Optimierung
-        optimization_frame = ttk.Frame(translation_frame)
-        optimization_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 0))
-        
+
+        # Timing-Optimierung Checkbox mit Tooltip
         self.de_optimization_var = tk.BooleanVar(value=False)
         self.de_optimization_check = ttk.Checkbutton(
-            optimization_frame, 
-            text="Deutsche Übersetzung: Timing strikt beibehalten (kann Segmente verlieren)", 
+            translation_frame,
+            text="Timing strikt (kann Segmente verlieren)",
             variable=self.de_optimization_var
         )
-        self.de_optimization_check.grid(row=0, column=0, sticky=tk.W)
-        
-        # Tooltip-artige Beschreibung  
-        optimization_info = ttk.Label(
-            optimization_frame, 
-            text="   ├─ Aus: Intelligente Timing-Expansion (empfohlen für Deutsche)",
-            font=("Arial", 8), foreground="gray"
+        self.de_optimization_check.grid(row=1, column=0, columnspan=6, sticky=tk.W, pady=(5, 0))
+        ToolTip(self.de_optimization_check,
+                "Aus: Intelligente Timing-Expansion (empfohlen für Deutsche)\n"
+                "An:  Strikte Timing-Erhaltung (Risiko: Segment-Verlust)")
+
+        # Smart Split Sektion
+        ttk.Label(main_frame, text="Smart Split (optional):", font=("Arial", 12, "bold")).grid(
+            row=10, column=0, sticky=tk.W, pady=(15, 5)
         )
-        optimization_info.grid(row=1, column=0, sticky=tk.W)
-        
-        optimization_info2 = ttk.Label(
-            optimization_frame, 
-            text="   └─ An: Strikte Timing-Erhaltung (Risiko: Segment-Verlust)",
-            font=("Arial", 8), foreground="gray"
-        )
-        optimization_info2.grid(row=2, column=0, sticky=tk.W)
-        
-        # Initial alle Übersetzungs-Widgets deaktivieren
-        self._toggle_translation_widgets(False)
-        
-        # Buttons
+
+        split_frame = ttk.Frame(main_frame)
+        split_frame.grid(row=11, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
+
+        # Smart Split aktivieren Checkbox
+        self.smart_split_enabled_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(split_frame, text="Smart Split aktivieren",
+                       variable=self.smart_split_enabled_var,
+                       command=self._on_smart_split_toggle).grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+
+        # Einstellungen (Teillänge und Überlappung)
+        split_settings_frame = ttk.Frame(split_frame)
+        split_settings_frame.grid(row=1, column=0, sticky=tk.W, padx=(20, 0))
+
+        ttk.Label(split_settings_frame, text="Teillänge:").grid(row=0, column=0, sticky=tk.W)
+        self.split_length_var = tk.IntVar(value=5)
+        self.split_length_spin = ttk.Spinbox(split_settings_frame, from_=1, to=60, width=5,
+                                            textvariable=self.split_length_var, state="disabled")
+        self.split_length_spin.grid(row=0, column=1, sticky=tk.W, padx=(5, 0))
+        ttk.Label(split_settings_frame, text="min").grid(row=0, column=2, sticky=tk.W, padx=(3, 20))
+
+        ttk.Label(split_settings_frame, text="Überlappung:").grid(row=0, column=3, sticky=tk.W)
+        self.split_overlap_var = tk.IntVar(value=2)
+        self.split_overlap_spin = ttk.Spinbox(split_settings_frame, from_=0, to=30, width=5,
+                                             textvariable=self.split_overlap_var, state="disabled")
+        self.split_overlap_spin.grid(row=0, column=4, sticky=tk.W, padx=(5, 0))
+        ttk.Label(split_settings_frame, text="sek").grid(row=0, column=5, sticky=tk.W, padx=(3, 0))
+
+        # Buttons (2 Reihen)
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=10, column=0, columnspan=2, pady=(20, 0))
-        
+        button_frame.grid(row=12, column=0, columnspan=2, pady=(20, 0))
+
         self.analyze_button = ttk.Button(button_frame, text="Video analysieren", command=self.analyze_video)
-        self.analyze_button.grid(row=0, column=0, padx=(0, 10))
-        
+        self.analyze_button.grid(row=0, column=0, padx=(0, 10), pady=(0, 5))
+
         self.scale_button = ttk.Button(button_frame, text="Video skalieren", command=self.scale_video, state="disabled")
-        self.scale_button.grid(row=0, column=1, padx=(0, 10))
-        
-        self.subtitle_button = ttk.Button(button_frame, text="Mit Untertiteln skalieren", command=self.scale_video_with_subtitles, state="disabled")
-        self.subtitle_button.grid(row=0, column=2, padx=(0, 10))
-        
-        self.translate_button = ttk.Button(button_frame, text="Mit Übersetzung skalieren", command=self.scale_video_with_translation, state="disabled")
-        self.translate_button.grid(row=0, column=3)
+        self.scale_button.grid(row=0, column=1, padx=(0, 10), pady=(0, 5))
+
+        self.subtitle_button = ttk.Button(button_frame, text="Mit Original-Untertiteln",
+                                         command=self.scale_video_with_subtitles, state="disabled")
+        self.subtitle_button.grid(row=1, column=0, padx=(0, 10))
+
+        self.translate_only_button = ttk.Button(button_frame, text="Mit Übersetzung",
+                                               command=lambda: self.scale_video_with_translation("only"), state="disabled")
+        self.translate_only_button.grid(row=1, column=1, padx=(0, 10))
+
+        self.translate_dual_button = ttk.Button(button_frame, text="Mit Original + Übersetzung",
+                                               command=lambda: self.scale_video_with_translation("dual"), state="disabled")
+        self.translate_dual_button.grid(row=1, column=2)
         
         # Progress Bar
         self.progress_var = tk.StringVar(value="Bereit")
         self.progress_label = ttk.Label(main_frame, textvariable=self.progress_var)
-        self.progress_label.grid(row=11, column=0, columnspan=2, pady=(20, 0))
-        
+        self.progress_label.grid(row=13, column=0, columnspan=2, pady=(20, 0))
+
         self.progress_bar = ttk.Progressbar(main_frame, mode='indeterminate')
-        self.progress_bar.grid(row=12, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
+        self.progress_bar.grid(row=14, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
         
         # Grid-Konfiguration
         main_frame.columnconfigure(0, weight=1)
@@ -370,20 +368,29 @@ class VidScalerApp:
         """Skaliert Video in separatem Thread"""
         try:
             self.video_processor.scale_video(input_path, output_path, new_width)
-            self.root.after(0, self._show_scaling_success, output_path)
-            
+
+            # Smart Split nach erfolgreicher Skalierung
+            split_paths = self._perform_smart_split_if_enabled(output_path)
+
+            self.root.after(0, self._show_scaling_success, output_path, split_paths)
+
         except Exception as e:
             self.root.after(0, self._show_scaling_error, str(e))
             
-    def _show_scaling_success(self, output_path: str):
+    def _show_scaling_success(self, output_path: str, split_paths: list = None):
         """Zeigt Erfolgsmeldung nach Skalierung"""
         self.progress_bar.stop()
         self.progress_var.set("Bereit")
         self.scale_button.config(state="normal")
         self.analyze_button.config(state="normal")
         self._update_subtitle_button_state()
-        
-        messagebox.showinfo("Erfolg", f"Video erfolgreich skaliert!\nGespeichert unter: {output_path}")
+
+        # Erfolgsmeldung zusammenstellen
+        if split_paths:
+            split_info = "\n\nSmart Split Teile:\n" + "\n".join([f"  - {os.path.basename(p)}" for p in split_paths])
+            messagebox.showinfo("Erfolg", f"Video erfolgreich verarbeitet!\nGespeichert unter: {output_path}{split_info}")
+        else:
+            messagebox.showinfo("Erfolg", f"Video erfolgreich skaliert!\nGespeichert unter: {output_path}")
         
     def _show_scaling_error(self, error_msg: str):
         """Zeigt Skalierungsfehler an"""
@@ -401,27 +408,21 @@ class VidScalerApp:
         self.scale_var.set("")
         self.scale_button.config(state="disabled")
         self.subtitle_button.config(state="disabled")
-        self.translate_button.config(state="disabled")
+        self.translate_only_button.config(state="disabled")
+        self.translate_dual_button.config(state="disabled")
         self.text_extract_button.config(state="disabled")
         self.current_resolution = None
         
     def _update_subtitle_button_state(self):
         """Aktualisiert Status der Untertitel/Übersetzungs-Buttons"""
-        # Normale Untertitel-Button
-        if (self.current_video_path and self.current_resolution and 
-            self.current_subtitle_path and self.scale_var.get()):
-            self.subtitle_button.config(state="normal")
-        else:
-            self.subtitle_button.config(state="disabled")
-            
-        # Übersetzungs-Button
-        if (self.current_video_path and self.current_resolution and 
-            self.current_subtitle_path and self.scale_var.get() and 
-            self.translate_enabled_var.get()):
-            self.translate_button.config(state="normal")
-        else:
-            self.translate_button.config(state="disabled")
-            
+        has_prerequisites = (self.current_video_path and self.current_resolution and
+                           self.current_subtitle_path and self.scale_var.get())
+        state = "normal" if has_prerequisites else "disabled"
+
+        self.subtitle_button.config(state=state)
+        self.translate_only_button.config(state=state)
+        self.translate_dual_button.config(state=state)
+
         # Text-Exzerpt-Button
         if self.current_subtitle_path and os.path.exists(self.current_subtitle_path):
             self.text_extract_button.config(state="normal")
@@ -471,64 +472,69 @@ class VidScalerApp:
         """Skaliert Video mit Untertiteln in separatem Thread"""
         try:
             self.video_processor.scale_video_with_subtitles(input_path, output_path, new_width, subtitle_path)
-            self.root.after(0, self._show_scaling_success, output_path)
-            
+
+            # Smart Split nach erfolgreicher Verarbeitung
+            split_paths = self._perform_smart_split_if_enabled(output_path)
+
+            self.root.after(0, self._show_scaling_success, output_path, split_paths)
+
         except Exception as e:
             self.root.after(0, self._show_scaling_error, str(e))
             
-    def scale_video_with_translation(self):
+    def scale_video_with_translation(self, translation_mode: str = "dual"):
         """Startet Video-Skalierung mit Übersetzung"""
         if not self.current_video_path or not self.current_resolution:
             messagebox.showerror("Fehler", "Bitte analysieren Sie zuerst das Video.")
             return
-            
+
         if not self.current_subtitle_path:
             messagebox.showerror("Fehler", "Bitte wählen Sie eine Untertitel-Datei aus.")
             return
-            
+
         if not os.path.exists(self.current_subtitle_path):
             messagebox.showerror("Fehler", "Die ausgewählte Untertitel-Datei existiert nicht.")
             return
-            
+
         selected = self.scale_var.get()
         if not selected:
             messagebox.showerror("Fehler", "Bitte wählen Sie eine Skalierungsoption aus.")
             return
-            
+
         # Breite aus Auswahl extrahieren
         new_width = int(selected.split()[0])
-        
+
         # Ausgabedatei generieren
         input_path = self.current_video_path
         name, ext = os.path.splitext(input_path)
-        if self.translation_mode_var.get() == "dual":
+        if translation_mode == "dual":
             output_path = f"{name}_dual_subtitled{ext}"
         else:
             output_path = f"{name}_translated{ext}"
-        
+
         self.progress_var.set("Video mit Übersetzung wird verarbeitet...")
         self.progress_bar.start()
         self.scale_button.config(state="disabled")
         self.subtitle_button.config(state="disabled")
-        self.translate_button.config(state="disabled")
+        self.translate_only_button.config(state="disabled")
+        self.translate_dual_button.config(state="disabled")
         self.analyze_button.config(state="disabled")
-        
+
         # Verarbeitung in separatem Thread
-        thread = threading.Thread(target=self._scale_video_with_translation_thread, 
-                                 args=(input_path, output_path, new_width))
+        thread = threading.Thread(target=self._scale_video_with_translation_thread,
+                                 args=(input_path, output_path, new_width, translation_mode))
         thread.daemon = True
         thread.start()
         
-    def _scale_video_with_translation_thread(self, input_path: str, output_path: str, new_width: int):
+    def _scale_video_with_translation_thread(self, input_path: str, output_path: str, new_width: int,
+                                               translation_mode: str = "dual"):
         """Skaliert Video mit Übersetzung in separatem Thread"""
         try:
             # Zuerst SRT übersetzen
             from translator import SubtitleTranslator
             translator = SubtitleTranslator()
-            
+
             source_lang = self.source_lang_var.get()
             target_lang = self.target_lang_var.get()
-            translation_mode = self.translation_mode_var.get()
             
             # Übersetzungsmethode bestimmen (using centralized mapping)
             method_text = self.translation_method_var.get()
@@ -559,12 +565,15 @@ class VidScalerApp:
             
             # Video mit Untertiteln verarbeiten
             self.video_processor.scale_video_with_translation(
-                input_path, output_path, new_width, 
+                input_path, output_path, new_width,
                 self.current_subtitle_path, translated_path, translation_mode
             )
-            
-            self.root.after(0, self._show_scaling_success, output_path)
-            
+
+            # Smart Split nach erfolgreicher Verarbeitung
+            split_paths = self._perform_smart_split_if_enabled(output_path)
+
+            self.root.after(0, self._show_scaling_success, output_path, split_paths)
+
         except ImportError:
             self.root.after(0, lambda: messagebox.showerror("Fehler", 
                 "Übersetzungsmodul konnte nicht geladen werden.\nBitte installieren Sie: pip install translators"))
@@ -634,39 +643,46 @@ class VidScalerApp:
             self.current_subtitle_path = None
         self._update_subtitle_button_state()
         
-    def _on_translation_toggle(self):
-        """Callback für Übersetzung aktivieren/deaktivieren"""
-        enabled = self.translate_enabled_var.get()
-        self._toggle_translation_widgets(enabled)
-        self._update_subtitle_button_state()  # Button-State nach Toggle aktualisieren
-        # Ensure the Whisper widgets are shown/hidden according to current method
-        self._on_method_change()
-        
-    def _toggle_translation_widgets(self, enabled: bool):
-        """Aktiviert/deaktiviert Übersetzungs-Widgets"""
-        state = "normal" if enabled else "disabled"
-        self.source_lang_combo.config(state=state)
-        self.target_lang_combo.config(state=state)
-        self.method_combo.config(state=state)
-        self.de_optimization_check.config(state=state)
-        if enabled and self.translation_method_var.get() == "Whisper (hochwertig)":
-            self.whisper_combo.config(state="normal")
-        else:
-            self.whisper_combo.config(state="disabled")
-            
     def _on_method_change(self, event=None):
         """Callback für Änderung der Übersetzungsmethode"""
         method = self.translation_method_var.get()
         if method == "Whisper (hochwertig)":
             # Whisper-Widgets anzeigen
-            self.whisper_label.grid(row=0, column=2, sticky=tk.W, padx=(15, 5))
-            self.whisper_combo.grid(row=0, column=3, sticky=tk.W)
-            if self.translate_enabled_var.get():
-                self.whisper_combo.config(state="normal")
+            self.whisper_label.grid(row=0, column=6, sticky=tk.W, padx=(10, 5))
+            self.whisper_combo.grid(row=0, column=7, sticky=tk.W)
+            self.whisper_combo.config(state="readonly")
         else:
             # Whisper-Widgets verstecken
             self.whisper_label.grid_remove()
             self.whisper_combo.grid_remove()
+
+    def _on_smart_split_toggle(self):
+        """Callback für Smart Split aktivieren/deaktivieren"""
+        enabled = self.smart_split_enabled_var.get()
+        state = "normal" if enabled else "disabled"
+        self.split_length_spin.config(state=state)
+        self.split_overlap_spin.config(state=state)
+
+    def _perform_smart_split_if_enabled(self, video_path: str) -> list:
+        """
+        Führt Smart Split durch, wenn aktiviert.
+
+        Args:
+            video_path: Pfad zum verarbeiteten Video
+
+        Returns:
+            Liste der Split-Dateipfade (leer wenn nicht aktiviert oder Video zu kurz)
+        """
+        if not self.smart_split_enabled_var.get():
+            return []
+
+        # Progress-Update
+        self.root.after(0, lambda: self.progress_var.set("Smart Split wird durchgeführt..."))
+
+        segment_minutes = self.split_length_var.get()
+        overlap_seconds = self.split_overlap_var.get()
+
+        return self.video_processor.split_video(video_path, segment_minutes, overlap_seconds)
 
 
 def main():

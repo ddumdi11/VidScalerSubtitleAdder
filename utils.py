@@ -92,6 +92,36 @@ def is_video_file(file_path: str) -> bool:
     return any(file_path.lower().endswith(ext) for ext in video_extensions)
 
 
+class ToolTip:
+    """Einfacher Tooltip für tkinter widgets"""
+    def __init__(self, widget, text):
+        import tkinter as tk
+        self.widget = widget
+        self.text = text
+        self.tooltip_window = None
+        self._tk = tk
+        widget.bind("<Enter>", self.show)
+        widget.bind("<Leave>", self.hide)
+
+    def show(self, event=None):
+        x = self.widget.winfo_rootx() + 25
+        y = self.widget.winfo_rooty() + 25
+
+        self.tooltip_window = tw = self._tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+
+        label = self._tk.Label(tw, text=self.text, justify=self._tk.LEFT,
+                        background="#ffffe0", relief=self._tk.SOLID, borderwidth=1,
+                        font=("Arial", 9))
+        label.pack()
+
+    def hide(self, event=None):
+        if self.tooltip_window:
+            self.tooltip_window.destroy()
+            self.tooltip_window = None
+
+
 def calculate_estimated_size_reduction(original_width: int, new_width: int) -> float:
     """
     Schätzt die Größenreduzierung basierend auf der Auflösungsänderung
