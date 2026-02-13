@@ -406,9 +406,18 @@ class VideoProcessor:
             if new_width % 2 != 0:
                 new_width += 1
 
+            # Dynamische Schriftgröße und Padding basierend auf Skalierung
+            orig_width, _ = self.get_video_dimensions(input_path)
+            scale_ratio = new_width / orig_width if orig_width > 0 else 1.0
+            BASE_FONT_SIZE = 13
+            MIN_FONT_SIZE = 9
+            font_size = max(MIN_FONT_SIZE, round(BASE_FONT_SIZE * (0.4 + scale_ratio * 0.6)))
+            logging.info(f"Subtitle styling: scale_ratio={scale_ratio:.2f}, font_size={font_size}")
+
             if translation_mode == "dual":
-                # Asymmetrisches Padding für sichere 2-Zeiler
-                top_pad, bot_pad = 140, 160
+                # Asymmetrisches Padding für sichere 2-Zeiler (dynamisch skaliert)
+                top_pad = max(80, round(140 * scale_ratio))
+                bot_pad = max(90, round(160 * scale_ratio))
 
                 # Temporäre Dateien im cwd -> keine Laufwerks-Doppelpunkte im Filter
                 cwd = os.getcwd()
@@ -426,9 +435,9 @@ class VideoProcessor:
                 _ensure_wrapstyle(temp_original_ass, 3)
                 _ensure_wrapstyle(temp_translated_ass, 3)
 
-                # 2) Styles je Datei (oben / unten)
-                _tweak_ass_style(temp_original_ass,  alignment=8, margin_v=10)   # TopCenter
-                _tweak_ass_style(temp_translated_ass, alignment=2, margin_v=12)  # BottomCenter
+                # 2) Styles je Datei (oben / unten) mit dynamischer Schriftgröße
+                _tweak_ass_style(temp_original_ass,  alignment=8, margin_v=10, font_size=font_size)   # TopCenter
+                _tweak_ass_style(temp_translated_ass, alignment=2, margin_v=12, font_size=font_size)  # BottomCenter
 
                 # 3) Video filtern: scale -> pad -> ass (oben) -> ass (unten)
                 vf = (
@@ -443,7 +452,7 @@ class VideoProcessor:
             else:
                 # Nur Übersetzung unten – gleicher Ansatz wie scale_video_with_subtitles:
                 # SRT direkt mit subtitles= Filter (rendert nach Padding im schwarzen Balken)
-                bot_pad = 100
+                bot_pad = max(60, round(100 * scale_ratio))
                 cwd = os.getcwd()
                 temp_translated_srt = os.path.join(cwd, "temp_subtitles.srt")
                 shutil.copy2(translated_subtitle_path, temp_translated_srt)
