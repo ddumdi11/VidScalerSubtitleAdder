@@ -1,109 +1,119 @@
 # VidScaler
 
-Eine benutzerfreundliche GUI-Anwendung zum Skalieren von Videos mit FFmpeg.
+Eine benutzerfreundliche GUI-Anwendung zum Skalieren von Videos mit FFmpeg – inklusive Untertitel-Einbettung, automatischer Audio-Transkription und mehrsprachiger Übersetzung.
 
 ## Überblick
 
-VidScaler vereinfacht das Skalieren von Videos, die mit dem Windows Snipping-Tool aufgenommen wurden. Die Anwendung zeigt die aktuelle Videoauflösung an und bietet eine Dropdown-Liste mit optimierten Skalierungsoptionen, um die Dateigröße zu reduzieren und gleichzeitig die bestmögliche Qualität zu erhalten.
+VidScaler vereinfacht das Skalieren von Videos unter Windows. Die Anwendung zeigt die aktuelle Videoauflösung an und bietet eine Dropdown-Liste mit optimierten Skalierungsoptionen, um die Dateigröße zu reduzieren und gleichzeitig die bestmögliche Qualität zu erhalten.
 
 ## Funktionen
 
-- **Video-Auswahl**: Einfache Dateiauswahl über GUI
-- **Auflösungsanzeige**: Zeigt aktuelle Videomaße (Breite x Höhe)
-- **Smart-Skalierung**: Dropdown-Menü mit vorgeschlagenen Skalierungswerten
-  - Automatische Berechnung gerader Pixelwerte (durch 2 teilbar)
-  - Sortierung von bester zu niedrigster Qualität
-- **FFmpeg-Integration**: Nahtlose Videobearbeitung über Python subprocess
-- **Windows-optimiert**: Speziell für Windows 11 entwickelt
-- **Untertitel-Einfügen**: Brennt Untertitel aus .srt-Dateien unterhalb des Videos ein (mit automatischer Videoerweiterung)
-- **🆕 Audio-Transkription**: Erstellt automatisch SRT-Dateien aus Video-Audio mit OpenAI Whisper
-- **Untertitel-Übersetzer**: Zeigt Original-Untertitel oberhalb und übersetzte Untertitel unterhalb des Videos an - wahlweise auch nur die Übersetzung
-  - **OpenAI Translation (beste Qualität)**: Hochwertige KI-Übersetzung via smart-srt-translator 
-  - **Google Translate (schnell)**: Kostenlose, schnelle Übersetzung
-  - **Whisper Translation (English-only)**: Lokale Übersetzung, nur nach Englisch
-- **📄 Text-Exzerpt**: Konvertiert SRT-Dateien zu gut lesbaren Text-/Markdown-Dokumenten mit KI-Veredelung
+- **Smart-Skalierung**: Dropdown-Menü mit optimierten Skalierungswerten (automatisch gerade Pixelwerte)
+- **Untertitel-Einbettung**: Brennt .srt-Untertitel in einen schwarzen Balken unterhalb des Videos ein
+- **Audio-Transkription**: Erstellt automatisch SRT-Dateien aus Video-Audio mit OpenAI Whisper
+- **Mehrsprachige Übersetzung**: Untertitel übersetzen mit drei Methoden:
+  - **OpenAI Translation** (beste Qualität): KI-Übersetzung via smart-srt-translator
+  - **Google Translate** (schnell): Kostenlose, schnelle Übersetzung
+  - **Whisper Translation** (lokal): Lokale Übersetzung, nur nach Englisch
+- **Dual Subtitles**: Original-Untertitel oben, Übersetzung unten – perfekt für Sprachlerner
+- **Smart Split**: Videos automatisch in konfigurierbare Segmente aufteilen (mit Überlappung)
+- **Text-Exzerpt**: Konvertiert SRT-Dateien zu gut lesbaren Text-/Markdown-Dokumenten mit KI-Veredelung
 
 ## Voraussetzungen
 
 - **Python 3.7+** (tkinter ist bereits enthalten)
 - **FFmpeg** muss installiert und im PATH verfügbar sein
-  - Download: https://ffmpeg.org/download.html
-  - Alternativ via chocolatey: `choco install ffmpeg`
+  - Download: <https://ffmpeg.org/download.html>
+  - Alternativ via Chocolatey: `choco install ffmpeg`
 
 ## Installation
 
-1. Repository klonen oder herunterladen
-2. FFmpeg installieren (falls noch nicht vorhanden)
-3. Virtuelle Umgebung einrichten und aktivieren:
+1. Repository klonen:
+
    ```bash
-   cd VidScaler
-   py -m venv .venv
-   .venv\Scripts\activate.bat
+   git clone https://github.com/ddumdi11/VidScalerSubtitleAdder.git
+   cd VidScalerSubtitleAdder
    ```
-4. **Für erweiterte Features:** Dependencies installieren:
+
+2. Virtuelle Umgebung einrichten und aktivieren:
+
    ```bash
-   py -m pip install -r requirements.txt
+   python -m venv .venv
+   .venv\Scripts\activate
    ```
-   Optional für Text-Exzerpt:
+
+3. Dependencies installieren:
+
    ```bash
-   pip install spacy openai
-   python -m spacy download de_core_news_sm  # Deutsches Sprachmodell
-   python -m spacy download en_core_web_sm # Englisches Sprachmodell "efficiency"
+   pip install -r requirements.txt
    ```
-5. Anwendung starten:
+
+4. Anwendung starten:
+
    ```bash
-   py vidscaler.py
+   python vidscaler.py
    ```
+
+Oder einfach per Doppelklick: `start.bat`
 
 ## Verwendung
 
-1. Sicherstellen, dass die virtuelle Umgebung aktiv ist:
-   ```bash
-   .venv\Scripts\activate.bat
-   ```
-2. Anwendung starten:
-   ```bash
-   py vidscaler.py
-   ```
-3. "Video auswählen" klicken und gewünschte Videodatei auswählen
-4. "Video analysieren" klicken - aktuelle Auflösung wird angezeigt
-5. Gewünschte Skalierung aus Dropdown-Menü wählen
-6. **🆕 SRT aus Audio erstellen:** "Audio transkribieren" klicken → separates Fenster öffnet sich → Audio wird extrahiert und mit Whisper transkribiert → Text editieren → als SRT exportieren
-7. **📄 Text-Exzerpt erstellen:** "Text-Exzerpt erstellen" klicken → SRT wird zu gut lesbarem Text verarbeitet → optional mit SpaCy (Satzgrenzen) und OpenAI (KI-Veredelung) → als .txt oder .md exportieren
-8. **Ohne Untertitel:** "Video skalieren" klicken - das bearbeitete Video wird mit "_scaled" Suffix gespeichert
-9. **Mit Untertiteln:** "Untertitel wählen..." klicken und .srt-Datei auswählen, dann "Mit Untertiteln skalieren" - das Video wird mit "_subtitled" Suffix gespeichert
+### Grundlegender Workflow
+
+1. **Video auswählen** und **"Video analysieren"** klicken – aktuelle Auflösung wird angezeigt
+2. Gewünschte **Skalierung** aus dem Dropdown-Menü wählen
+3. Optional: **"Audio transkribieren"** klicken, um SRT-Untertitel aus dem Audio zu erstellen
+4. Optional: **Übersetzung** konfigurieren (Quell-/Zielsprache und Methode wählen)
+
+### Aktions-Buttons
+
+| Button | Beschreibung | Ausgabe-Suffix |
+| --- | --- | --- |
+| **Video skalieren** | Nur Skalierung, keine Untertitel | `_scaled` |
+| **Mit Original-Untertiteln** | Original-SRT im schwarzen Balken unter dem Video | `_subtitled` |
+| **Mit Übersetzung** | Nur übersetzte Untertitel im schwarzen Balken | `_translated` |
+| **Mit Original + Übersetzung** | Original oben, Übersetzung unten (Dual Mode) | `_dual_subtitled` |
+
+### Weitere Features
+
+- **Smart Split**: Checkbox aktivieren, Teillänge (1–60 Min) und Überlappung (0–30 Sek) einstellen. Das Video wird nach der Verarbeitung automatisch aufgeteilt.
+- **Text-Exzerpt**: SRT zu lesbarem Text/Markdown konvertieren – optional mit SpaCy (Satzgrenzen) und OpenAI (KI-Veredelung).
 
 ## Technische Details
 
-Die Anwendung verwendet folgende FFmpeg-Befehle:
+Die Anwendung verwendet folgende FFmpeg-Filter:
 
-**Normale Skalierung:**
+**Skalierung:**
 ```bash
-ffmpeg -i input.mp4 -vf scale=WIDTH:-1 output_scaled.mp4
+ffmpeg -i input.mp4 -vf "scale=WIDTH:-2" output_scaled.mp4
 ```
 
-**Skalierung mit Untertiteln:**
+**Untertitel (einzeln):**
 ```bash
-ffmpeg -i input.mp4 -vf "scale=WIDTH:-2,pad=iw:ih+100:0:0:black,subtitles=subtitles.srt:force_style='Alignment=2,MarginV=20'" output_subtitled.mp4
+ffmpeg -i input.mp4 -vf "scale=WIDTH:-2,pad=iw:ih+100:0:0:black,subtitles=file.srt:charenc=UTF-8" output_subtitled.mp4
 ```
 
-- `-1` sorgt für automatische, proportionale Höhenberechnung
-- `-2` erzwingt gerade Pixelwerte für bessere Kompatibilität  
-- `pad` erweitert das Video um 100px nach unten für Untertitel
-- `subtitles` brennt die Untertitel unten ins Video ein
+**Dual Subtitles (SRT → ASS Pipeline):**
+```bash
+ffmpeg -i input.mp4 -vf "scale=WIDTH:-2,pad=iw:ih+300:0:140:black,ass=original.ass,ass=translated.ass" output.mp4
+```
+
+- `-2` erzwingt gerade Pixelwerte für Codec-Kompatibilität
+- `pad` erweitert das Video um einen schwarzen Balken für Untertitel
+- `subtitles=` brennt SRT direkt ein, `ass=` ermöglicht präzise Style-Kontrolle
 
 ## Fehlerbehebung
 
-**"Höhe nicht durch 2 teilbar" Fehler**: 
-Die Anwendung berechnet automatisch gerade Pixelwerte, um diesen häufigen FFmpeg-Fehler zu vermeiden.
-
-**FFmpeg nicht gefunden**: 
+**FFmpeg nicht gefunden:**
 Stelle sicher, dass FFmpeg korrekt installiert und im System-PATH verfügbar ist.
 
-**Untertitel werden nicht angezeigt**:
-- Prüfe, ob die .srt-Datei korrekt formatiert ist
+**Untertitel werden nicht angezeigt:**
+
+- Prüfe, ob die .srt-Datei korrekt formatiert ist (UTF-8)
 - Unterstützte Formate: .srt, .ass, .vtt
-- Stelle sicher, dass die Zeitangaben im Video existieren
+
+**Doppelte Untertitel in VLC:**
+VLC lädt automatisch externe SRT-Dateien mit gleichem Basisnamen. Wenn `_translated.mp4` und `_translated.srt` im selben Ordner liegen, zeigt VLC die Untertitel doppelt an. Lösung: In VLC unter *Untertitel → Unterspur → Deaktivieren*.
 
 ## Lizenz
 

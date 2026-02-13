@@ -39,14 +39,18 @@ python vidscaler.py
 VidScaler/
 ├── vidscaler.py          # Haupt-GUI-Anwendung
 ├── video_processor.py    # FFmpeg-Interface
-├── utils.py             # Hilfsfunktionen
+├── utils.py              # Hilfsfunktionen (ToolTip, etc.)
 ├── audio_transcriber.py  # Audio-zu-SRT Transkriptor mit Whisper
-├── translator.py        # SRT-Übersetzungs-Engine
-├── requirements.txt     # Abhängigkeiten
-├── start.bat            # Windows Doppelklick-Starter
-├── .venv/              # Virtual Environment
-├── README.md           # Benutzeranleitung
-└── CLAUDE.md          # Diese Datei
+├── translator.py         # SRT-Übersetzungs-Engine
+├── text_extractor.py     # Text-Exzerpt aus SRT-Dateien
+├── debug_logger.py       # Debug-Logging für Entwicklung
+├── requirements.txt      # Abhängigkeiten
+├── start.bat             # Windows Doppelklick-Starter
+├── docs/                 # GitHub Pages Landing Page
+│   └── index.html
+├── .venv/                # Virtual Environment
+├── README.md             # Benutzeranleitung
+└── CLAUDE.md             # Diese Datei
 ```
 
 ## Entwicklungsrichtlinien
