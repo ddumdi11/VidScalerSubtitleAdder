@@ -659,29 +659,6 @@ class SubtitleTranslator:
                 return result_path
             except Exception as e:
                 debug_logger.error("OpenAI Translation FAILED", e)
-                # If user explicitly requested OpenAI, do not silently fall back
-                if method == "openai":
-                    raise
-                # Auto mode: try graceful fallbacks
-                # Prefer Google translators backend if available
-                if TRANSLATORS_AVAILABLE:
-                    debug_logger.step("FALLBACK: Using Google translators backend", {
-                        "src_lang": source_lang,
-                        "tgt_lang": target_lang,
-                    })
-                    return self._translate_srt_google(input_path, source_lang, target_lang)
-                # If Whisper is available and target is English and video is provided, use Whisper
-                if self.has_whisper and video_path and target_lang == "en":
-                    debug_logger.step("FALLBACK: Using Whisper translate (to English)", {
-                        "video_path": video_path,
-                        "whisper_model": whisper_model,
-                    })
-                    if self.whisper_translator is None:
-                        self.whisper_translator = WhisperTranslator()
-                    return self.whisper_translator.translate_via_whisper(
-                        video_path, input_path, "en", whisper_model
-                    )
-                # No viable fallback
                 raise
 
         if method == "whisper" and self.has_whisper and video_path:

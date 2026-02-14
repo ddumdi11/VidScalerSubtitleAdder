@@ -415,9 +415,13 @@ class VideoProcessor:
             logging.info(f"Subtitle styling: scale_ratio={scale_ratio:.2f}, font_size={font_size}")
 
             if translation_mode == "dual":
-                # Asymmetrisches Padding für sichere 2-Zeiler (dynamisch skaliert)
+                # Asymmetrisches Padding für sichere 2-Zeiler (dynamisch skaliert, gerade Werte für Codec)
                 top_pad = max(80, round(140 * scale_ratio))
                 bot_pad = max(90, round(160 * scale_ratio))
+                if top_pad % 2 != 0:
+                    top_pad += 1
+                if bot_pad % 2 != 0:
+                    bot_pad += 1
 
                 # Temporäre Dateien im cwd -> keine Laufwerks-Doppelpunkte im Filter
                 cwd = os.getcwd()
@@ -453,6 +457,8 @@ class VideoProcessor:
                 # Nur Übersetzung unten – gleicher Ansatz wie scale_video_with_subtitles:
                 # SRT direkt mit subtitles= Filter (rendert nach Padding im schwarzen Balken)
                 bot_pad = max(60, round(100 * scale_ratio))
+                if bot_pad % 2 != 0:
+                    bot_pad += 1
                 cwd = os.getcwd()
                 temp_translated_srt = os.path.join(cwd, "temp_subtitles.srt")
                 shutil.copy2(translated_subtitle_path, temp_translated_srt)
