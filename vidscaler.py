@@ -166,17 +166,18 @@ class VidScalerApp:
                                         width=12, state="readonly")
         self.whisper_combo['values'] = ["tiny (schnell)", "base (empfohlen)", "small (genau)"]
 
-        # Timing-Optimierung Checkbox mit Tooltip
+        # Timing-Expansion Checkbox mit Tooltip
         self.de_optimization_var = tk.BooleanVar(value=False)
         self.de_optimization_check = ttk.Checkbutton(
             translation_frame,
-            text="Timing strikt (kann Segmente verlieren)",
+            text="Timing-Expansion (Untertitel zeitlich strecken)",
             variable=self.de_optimization_var
         )
         self.de_optimization_check.grid(row=1, column=0, columnspan=6, sticky=tk.W, pady=(5, 0))
         ToolTip(self.de_optimization_check,
-                "Aus: Intelligente Timing-Expansion (empfohlen für Deutsche)\n"
-                "An:  Strikte Timing-Erhaltung (Risiko: Segment-Verlust)")
+                "Aus (Standard): Untertitel bleiben synchron zum Originalton\n"
+                "An: Untertitel werden zeitlich gestreckt für mehr Lesezeit.\n"
+                "ACHTUNG: Untertitel laufen dann nicht mehr synchron!")
 
         # Smart Split Sektion
         ttk.Label(main_frame, text="Smart Split (optional):", font=("Arial", 12, "bold")).grid(
@@ -509,7 +510,7 @@ class VidScalerApp:
         if translation_mode == "dual":
             output_path = f"{name}_dual_subtitled{ext}"
         else:
-            output_path = f"{name}_translated{ext}"
+            output_path = f"{name}_mono_subtitled{ext}"
 
         self.progress_var.set("Video mit Übersetzung wird verarbeitet...")
         self.progress_bar.start()
