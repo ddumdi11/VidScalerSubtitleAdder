@@ -32,8 +32,8 @@ def parse_srt_segments(srt_path: str) -> List[Dict]:
         if not block.strip():
             continue
         lines = block.strip().splitlines()
-        if len(lines) < 2:
-            continue
+        if len(lines) < 2:  # Bewusst < 2 (nicht < 3): Validator braucht auch
+            continue        # text-leere Segmente, um sie als "leer" zu erkennen
         try:
             index = int(lines[0])
             timestamp = lines[1]
@@ -118,7 +118,7 @@ def validate_translation(original_path: str, translated_path: str,
         empty_in_last_quarter = sum(1 for idx in empty_indices if idx >= last_quarter_start)
 
         if empty_in_last_quarter >= empty_count * 0.5:
-            drift_amount = empty_count
+            drift_amount = empty_in_last_quarter
 
             # Finde den Startpunkt: erstes leeres Segment in der zweiten Hälfte
             for i in range(total):

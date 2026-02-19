@@ -119,5 +119,11 @@ class ValidationDialog:
         Returns:
             "proceed" oder "abort"
         """
-        self.event.wait(timeout=timeout)
+        finished = self.event.wait(timeout=timeout)
+        if not finished:
+            # Timeout: Dialog aus dem Hauptthread heraus schließen
+            try:
+                self.root.after(0, self.dialog.destroy)
+            except Exception:
+                pass
         return self.user_choice or "abort"

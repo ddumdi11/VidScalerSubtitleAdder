@@ -124,7 +124,7 @@ VidScaler/
 ## Installation (Alle Dependencies)
 ```bash
 pip install openai-whisper matplotlib pydub translators
-pip install smart-srt-translator[openai]>=0.1.4
+pip install 'smart-srt-translator[openai]>=0.1.4'
 ```
 
 ## 🎉 Phase 3 Features (Übersetzung) - ✅ PRODUKTIONSREIF!

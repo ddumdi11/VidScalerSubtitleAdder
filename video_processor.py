@@ -372,13 +372,18 @@ class VideoProcessor:
                 done = True
                 break
         if not done:
+            inserted = False
             for i, line in enumerate(lines):
                 if line.strip().lower().startswith("[script info]"):
                     insert_at = i + 1
                     while insert_at < len(lines) and lines[insert_at].strip().startswith(";"):
                         insert_at += 1
                     lines.insert(insert_at, f"WrapStyle: {wrap_style}\n")
+                    inserted = True
                     break
+            if not inserted:
+                logging.warning("_ensure_wrapstyle: [Script Info] not found in %s, "
+                                "WrapStyle %d was not applied", ass_path, wrap_style)
 
         with open(ass_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
@@ -391,8 +396,10 @@ class VideoProcessor:
         with open(ass_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
+        found = False
         for i, line in enumerate(lines):
             if line.strip().lower().startswith("style: default"):
+                found = True
                 parts = [p.strip() for p in line.strip().split(",")]
                 if len(parts) >= 23:
                     parts[2]  = str(font_size)      # Fontsize
@@ -403,7 +410,13 @@ class VideoProcessor:
                     parts[20] = str(margin_r)        # MarginR
                     parts[21] = str(margin_v)        # MarginV
                     lines[i] = ",".join(parts) + "\n"
+                else:
+                    logging.warning("_tweak_ass_style: 'Style: Default' in %s has %d fields "
+                                    "(expected >=23), style not applied", ass_path, len(parts))
                 break
+        if not found:
+            logging.warning("_tweak_ass_style: No 'Style: Default' line found in %s, "
+                            "style not applied", ass_path)
 
         with open(ass_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
