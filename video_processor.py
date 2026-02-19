@@ -287,119 +287,130 @@ class VideoProcessor:
     def scale_video_with_subtitles(self, input_path: str, output_path: str, new_width: int, subtitle_path: str):
         """Skaliert Video und brennt Untertitel unterhalb des Videos ein"""
         temp_subtitle_abs = None
+        temp_ass_path = None
         try:
             # Stelle sicher, dass new_width gerade ist
             if new_width % 2 != 0:
                 new_width += 1
-            
-            # Berechne Padding-Höhe für Untertitel (100px sollten ausreichen)
-            subtitle_padding = 100
-            
+
+            # Dynamische Schriftgröße und Padding basierend auf Skalierung
+            orig_width, _ = self.get_video_dimensions(input_path)
+            scale_ratio = new_width / orig_width if orig_width > 0 else 1.0
+            BASE_FONT_SIZE = 13
+            MIN_FONT_SIZE = 9
+            font_size = max(MIN_FONT_SIZE, round(BASE_FONT_SIZE * (0.4 + scale_ratio * 0.6)))
+
+            bot_pad = max(60, round(100 * scale_ratio))
+            if bot_pad % 2 != 0:
+                bot_pad += 1
+
+            logging.info(f"Original subtitle styling: scale_ratio={scale_ratio:.2f}, font_size={font_size}, bot_pad={bot_pad}")
+
             # Kopiere Untertitel-Datei temporär ins Arbeitsverzeichnis
-            # um Windows-Pfad-Probleme zu vermeiden
-            with tempfile.NamedTemporaryFile(dir=os.getcwd(), prefix="temp_subtitles_", suffix=".srt", delete=False) as tf:
+            cwd = os.getcwd()
+            with tempfile.NamedTemporaryFile(dir=cwd, prefix="temp_subtitles_", suffix=".srt", delete=False) as tf:
                 temp_subtitle_abs = tf.name
-                temp_subtitle_basename = os.path.basename(tf.name)  # for subtitles= filter
             shutil.copy2(subtitle_path, temp_subtitle_abs)
-            
-            # FFmpeg-Befehl: Video erweitern und Untertitel einbrennen
-            # Verwende einfachen relativen Pfad
+
+            # SRT → ASS Konvertierung für Style-Kontrolle
+            temp_ass_path = os.path.splitext(temp_subtitle_abs)[0] + ".ass"
+            self._convert_srt_to_ass(temp_subtitle_abs, temp_ass_path)
+            self._ensure_wrapstyle(temp_ass_path, 3)
+            self._tweak_ass_style(temp_ass_path, alignment=2, margin_v=12, font_size=font_size)
+
+            # FFmpeg-Befehl: Video erweitern und ASS-Untertitel einbrennen
             cmd = [
                 self.ffmpeg_path, '-nostdin', '-hide_banner', '-loglevel', 'error',
                 '-i', input_path,
-                '-vf', f'scale={new_width}:-2,pad=iw:ih+{subtitle_padding}:0:0:black,subtitles={temp_subtitle_basename}:charenc=UTF-8',
-                '-y',  # Überschreibe Ausgabedatei ohne Nachfrage
+                '-vf', f'scale={new_width}:-2,pad=iw:ih+{bot_pad}:0:0:black,ass=filename={os.path.basename(temp_ass_path)}',
+                '-y',
                 output_path
             ]
-            
+
             # Führe FFmpeg-Befehl aus (hardened with timeout)
             subprocess.run(cmd, capture_output=True, text=True, shell=False,
                            timeout=FFMPEG_TIMEOUT_LONG, check=True, **SUBPROCESS_FLAGS)
-            
+
             # Prüfe, ob Ausgabedatei erstellt wurde
             if not os.path.exists(output_path):
                 raise RuntimeError("Ausgabedatei wurde nicht erstellt")
-                
+
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if e.stderr else str(e)
             raise RuntimeError(f"FFmpeg-Fehler bei Untertitel-Verarbeitung: {error_msg}") from e
         except Exception as e:
             raise RuntimeError("Unerwarteter Fehler bei der Untertitel-Verarbeitung") from e
         finally:
-            # Temporäre Untertitel-Datei aufräumen
-            if temp_subtitle_abs and os.path.exists(temp_subtitle_abs):
-                try:
-                    os.remove(temp_subtitle_abs)
-                except OSError as e:
-                    logging.debug("Failed to cleanup temp file %s: %s", temp_subtitle_abs, e)
+            # Temporäre Dateien aufräumen
+            for p in [temp_subtitle_abs, temp_ass_path]:
+                if p and os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except OSError as e:
+                        logging.debug("Failed to cleanup temp file %s: %s", p, e)
                     
-    def scale_video_with_translation(self, input_path: str, output_path: str, new_width: int, 
+    def _convert_srt_to_ass(self, src_srt: str, dst_ass: str):
+        “””SRT -> ASS Konvertierung (UTF-8 erzwingen).”””
+        subprocess.run([self.ffmpeg_path, “-nostdin”, “-hide_banner”, “-loglevel”, “error”,
+                        “-y”, “-sub_charenc”, “UTF-8”, “-i”, src_srt, dst_ass],
+            capture_output=True, text=True, shell=False, timeout=FFMPEG_TIMEOUT_SHORT,
+            check=True, **SUBPROCESS_FLAGS)
+
+    @staticmethod
+    def _ensure_wrapstyle(ass_path: str, wrap_style: int = 3):
+        “””Setzt WrapStyle in einer ASS-Datei (3 = gleichmäßige Umbrüche).”””
+        with open(ass_path, “r”, encoding=”utf-8”) as f:
+            lines = f.readlines()
+
+        done = False
+        for i, line in enumerate(lines):
+            if line.strip().lower().startswith(“wrapstyle:”):
+                lines[i] = f”WrapStyle: {wrap_style}\n”
+                done = True
+                break
+        if not done:
+            for i, line in enumerate(lines):
+                if line.strip().lower().startswith(“[script info]”):
+                    insert_at = i + 1
+                    while insert_at < len(lines) and lines[insert_at].strip().startswith(“;”):
+                        insert_at += 1
+                    lines.insert(insert_at, f”WrapStyle: {wrap_style}\n”)
+                    break
+
+        with open(ass_path, “w”, encoding=”utf-8”) as f:
+            f.writelines(lines)
+
+    @staticmethod
+    def _tweak_ass_style(ass_path: str, *, alignment: int, margin_v: int,
+                         font_size: int = 13, outline: int = 2, shadow: int = 0,
+                         margin_l: int = 2, margin_r: int = 2):
+        “””Passt ASS V4+ Style-Zeile an (Fontsize, Alignment, Margins etc.).”””
+        with open(ass_path, “r”, encoding=”utf-8”) as f:
+            lines = f.readlines()
+
+        for i, line in enumerate(lines):
+            if line.strip().lower().startswith(“style: default”):
+                parts = [p.strip() for p in line.strip().split(“,”)]
+                if len(parts) >= 23:
+                    parts[2]  = str(font_size)      # Fontsize
+                    parts[16] = str(outline)         # Outline
+                    parts[17] = str(shadow)          # Shadow
+                    parts[18] = str(alignment)       # Alignment (2=BottomCenter, 8=TopCenter)
+                    parts[19] = str(margin_l)        # MarginL
+                    parts[20] = str(margin_r)        # MarginR
+                    parts[21] = str(margin_v)        # MarginV
+                    lines[i] = “,”.join(parts) + “\n”
+                break
+
+        with open(ass_path, “w”, encoding=”utf-8”) as f:
+            f.writelines(lines)
+
+    def scale_video_with_translation(self, input_path: str, output_path: str, new_width: int,
                                  original_subtitle_path: str, translated_subtitle_path: str,
-                                 translation_mode: str = "dual"):
-        """Skaliert Video mit originalen und übersetzten Untertiteln (SRT -> ASS, feste Styles)"""
+                                 translation_mode: str = “dual”):
+        “””Skaliert Video mit originalen und übersetzten Untertiteln (SRT -> ASS, feste Styles)”””
         temp_original_srt = temp_translated_srt = None
         temp_original_ass = temp_translated_ass = None
-
-        def _convert_srt_to_ass(src_srt: str, dst_ass: str):
-            # SRT -> ASS (UTF-8 erzwingen) - hardened subprocess call
-            subprocess.run([self.ffmpeg_path, "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-sub_charenc", "UTF-8", "-i", src_srt, dst_ass],
-                capture_output=True, text=True, shell=False, timeout=FFMPEG_TIMEOUT_SHORT, 
-                check=True, **SUBPROCESS_FLAGS)
-
-        def _ensure_wrapstyle(ass_path: str, wrap_style: int = 3):
-            # 0/3 = “smart” (3 bevorzugt meist gleichmäßiger),
-            # 1 = nur manuelle \N, 2 = keine Umbrüche
-            with open(ass_path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-
-            # vorhandenen Eintrag ersetzen oder unter [Script Info] hinzufügen
-            done = False
-            for i, line in enumerate(lines):
-                if line.strip().lower().startswith("wrapstyle:"):
-                    lines[i] = f"WrapStyle: {wrap_style}\n"
-                    done = True
-                    break
-            if not done:
-                for i, line in enumerate(lines):
-                    if line.strip().lower().startswith("[script info]"):
-                        insert_at = i + 1
-                        while insert_at < len(lines) and lines[insert_at].strip().startswith(";"):
-                            insert_at += 1
-                        lines.insert(insert_at, f"WrapStyle: {wrap_style}\n")
-                        break
-
-            with open(ass_path, "w", encoding="utf-8") as f:
-                f.writelines(lines)
-
-
-        def _tweak_ass_style(ass_path: str, *, alignment: int, margin_v: int,
-                             font_size: int = 13, outline: int = 2, shadow: int = 0, # vorher 20→15, jetzt 13
-                             margin_l: int = 2, margin_r: int = 2): # vorher 10/10, jetzt 2/2
-            # Passe "Style: Default,..." an (ASS V4+ Format-Reihenfolge)
-            with open(ass_path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-
-            # TODO: fmt_idx_map was removed as dead code (Code-Rabbit suggestion)
-            # The indices are now inlined below for minimal function complexity
-            # fmt_idx_map = { ... } # Previously here for documentation
-
-            for i, line in enumerate(lines):
-                if line.strip().lower().startswith("style: default"):
-                    parts = [p.strip() for p in line.strip().split(",")]
-                    # Sicherstellen, dass genügend Felder vorhanden sind
-                    if len(parts) >= 23:
-                        parts[2]  = str(font_size)                    # Fontsize
-                        parts[16] = str(outline)                      # Outline
-                        parts[17] = str(shadow)                       # Shadow
-                        parts[18] = str(alignment)                    # Alignment (2=BottomCenter, 8=TopCenter)
-                        parts[19] = str(margin_l)                     # MarginL
-                        parts[20] = str(margin_r)                     # MarginR
-                        parts[21] = str(margin_v)                     # MarginV (oben bzw. unten)
-                        lines[i] = ",".join(parts) + "\n"
-                    break
-
-            with open(ass_path, "w", encoding="utf-8") as f:
-                f.writelines(lines)
 
         try:
             # Breite gerade machen
@@ -434,14 +445,14 @@ class VideoProcessor:
                 temp_translated_ass = os.path.join(cwd, "temp_translated.ass")
 
                 # 1) SRT -> ASS
-                _convert_srt_to_ass(temp_original_srt,  temp_original_ass)
-                _convert_srt_to_ass(temp_translated_srt, temp_translated_ass)
-                _ensure_wrapstyle(temp_original_ass, 3)
-                _ensure_wrapstyle(temp_translated_ass, 3)
+                self._convert_srt_to_ass(temp_original_srt,  temp_original_ass)
+                self._convert_srt_to_ass(temp_translated_srt, temp_translated_ass)
+                self._ensure_wrapstyle(temp_original_ass, 3)
+                self._ensure_wrapstyle(temp_translated_ass, 3)
 
                 # 2) Styles je Datei (oben / unten) mit dynamischer Schriftgröße
-                _tweak_ass_style(temp_original_ass,  alignment=8, margin_v=10, font_size=font_size)   # TopCenter
-                _tweak_ass_style(temp_translated_ass, alignment=2, margin_v=12, font_size=font_size)  # BottomCenter
+                self._tweak_ass_style(temp_original_ass,  alignment=8, margin_v=10, font_size=font_size)   # TopCenter
+                self._tweak_ass_style(temp_translated_ass, alignment=2, margin_v=12, font_size=font_size)  # BottomCenter
 
                 # 3) Video filtern: scale -> pad -> ass (oben) -> ass (unten)
                 vf = (
@@ -454,8 +465,7 @@ class VideoProcessor:
                 cmd = [self.ffmpeg_path, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
 
             else:
-                # Nur Übersetzung unten – gleicher Ansatz wie scale_video_with_subtitles:
-                # SRT direkt mit subtitles= Filter (rendert nach Padding im schwarzen Balken)
+                # Nur Übersetzung unten — SRT→ASS mit dynamischer Schriftgröße
                 bot_pad = max(60, round(100 * scale_ratio))
                 if bot_pad % 2 != 0:
                     bot_pad += 1
@@ -463,10 +473,15 @@ class VideoProcessor:
                 temp_translated_srt = os.path.join(cwd, "temp_subtitles.srt")
                 shutil.copy2(translated_subtitle_path, temp_translated_srt)
 
+                temp_translated_ass = os.path.join(cwd, "temp_subtitles.ass")
+                self._convert_srt_to_ass(temp_translated_srt, temp_translated_ass)
+                self._ensure_wrapstyle(temp_translated_ass, 3)
+                self._tweak_ass_style(temp_translated_ass, alignment=2, margin_v=12, font_size=font_size)
+
                 vf = (
                     f"scale={new_width}:-2,"
                     f"pad=iw:ih+{bot_pad}:0:0:black,"
-                    f"subtitles={os.path.basename(temp_translated_srt)}:charenc=UTF-8"
+                    f"ass=filename={os.path.basename(temp_translated_ass)}"
                 )
 
                 cmd = [self.ffmpeg_path, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", input_path, "-vf", vf, "-y", output_path]
