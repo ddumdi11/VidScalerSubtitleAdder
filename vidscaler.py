@@ -402,6 +402,24 @@ class VidScalerApp:
         self._update_subtitle_button_state()
         messagebox.showerror("Skalierungsfehler", f"Video konnte nicht skaliert werden:\n{error_msg}")
         
+    def _show_validation_aborted(self, translated_path: str):
+        """Zeigt Meldung nach Abbruch durch Validierung."""
+        self.progress_bar.stop()
+        self.progress_var.set("Bereit")
+        self.scale_button.config(state="normal")
+        self.subtitle_button.config(state="normal")
+        self.translate_only_button.config(state="normal")
+        self.translate_dual_button.config(state="normal")
+        self.analyze_button.config(state="normal")
+
+        messagebox.showinfo(
+            "Verarbeitung abgebrochen",
+            f"Die Verarbeitung wurde abgebrochen.\n\n"
+            f"Die übersetzte SRT-Datei wurde trotzdem gespeichert:\n"
+            f"{translated_path}\n\n"
+            f"Du kannst sie manuell prüfen und korrigieren."
+        )
+
     def reset_ui(self):
         """Setzt UI-Elemente zurück"""
         self.resolution_label.config(text="Kein Video geladen", foreground="gray")
@@ -561,7 +579,28 @@ class VidScalerApp:
                 method=method, video_path=self.current_video_path, whisper_model=whisper_model,
                 de_readability_optimization=de_readability_optimization
             )
-            
+
+            # Übersetzung validieren vor dem Einbrennen
+            try:
+                from subtitle_validator import validate_translation
+                from validation_dialog import ValidationDialog
+
+                validation_result = validate_translation(
+                    self.current_subtitle_path, translated_path
+                )
+
+                if not validation_result.is_valid:
+                    # Dialog im Hauptthread anzeigen, auf Antwort warten
+                    dialog = ValidationDialog(self.root, validation_result)
+                    self.root.after(0, dialog.show)
+                    user_choice = dialog.wait_for_choice()
+
+                    if user_choice == "abort":
+                        self.root.after(0, self._show_validation_aborted, translated_path)
+                        return
+            except ImportError:
+                pass  # Validierung nicht verfügbar — ohne Validierung weiter
+
             self.root.after(0, lambda: self.progress_var.set("Video wird mit Untertiteln verarbeitet..."))
             
             # Video mit Untertiteln verarbeiten
