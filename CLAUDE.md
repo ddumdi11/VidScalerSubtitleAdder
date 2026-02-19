@@ -42,6 +42,8 @@ VidScaler/
 ├── utils.py              # Hilfsfunktionen (ToolTip, etc.)
 ├── audio_transcriber.py  # Audio-zu-SRT Transkriptor mit Whisper
 ├── translator.py         # SRT-Übersetzungs-Engine
+├── subtitle_validator.py # Validierung: Original vs. übersetzte SRT
+├── validation_dialog.py  # Tkinter-Dialog bei Übersetzungsproblemen
 ├── text_extractor.py     # Text-Exzerpt aus SRT-Dateien
 ├── debug_logger.py       # Debug-Logging für Entwicklung
 ├── requirements.txt      # Abhängigkeiten
@@ -87,8 +89,8 @@ VidScaler/
 
 **🎯 Doppelte Untertitel-Integration (SRT → ASS Pipeline):**
 - **SRT → ASS Konvertierung**: `ffmpeg -sub_charenc UTF-8 -i input.srt output.ass` für Style-Kontrolle
-- **Asymmetrisches Padding**: 140px oben + 160px unten für optimale 2-Zeilen-Darstellung
-- **Präzise Style-Parameter**: FontSize=15, Outline=2, MarginL/R=2, WrapStyle=3
+- **Dynamisches Padding**: Skaliert mit Video-Breite (top: max(80, 140×ratio), bot: max(90, 160×ratio))
+- **Dynamische Schriftgröße**: `max(9, round(13 × (0.4 + scale_ratio × 0.6)))` → konsistent über alle 3 Modi
 - **Positioning**: Original TopCenter (Alignment=8), Übersetzung BottomCenter (Alignment=2)
 - **Windows-Pfad-Fix**: Temporäre Dateien im cwd, `os.path.basename()` in FFmpeg-Filtern
 - **Befehl**: `ffmpeg -i input.mp4 -vf "scale=WIDTH:-2,pad=iw:ih+300:0:140:black,ass=original.ass,ass=translated.ass" output.mp4`
@@ -102,12 +104,13 @@ VidScaler/
 - Standalone Python-Script
 - Optional: PyInstaller für .exe-Distribution
 
-## ✅ Aktueller Status (Phase 2 ERFOLGREICH getestet!)
+## ✅ Aktueller Status (Phase 7b ERFOLGREICH → PR #12 gemergt!)
 - **Basis-Skalierung**: ✅ Funktioniert perfekt
-- **Untertitel-Einfügung**: ✅ Funktioniert perfekt - Schriftgröße optimal!
+- **Untertitel-Einfügung**: ✅ Funktioniert perfekt - dynamische Schriftgröße!
 - **GUI**: ✅ Alle Controls implementiert und funktionsfähig
 - **Windows-Kompatibilität**: ✅ Pfad-Probleme gelöst
 - **🎉 Audio-Transkription**: ✅ LIVE GETESTET - funktioniert perfekt!
+- **🎉 Übersetzungsqualität**: ✅ OpenAI-Fallback behoben, Batching in v0.1.4, Validation Safety-Net aktiv
 
 ## 🆕 Phase 2 Features (Audio Transcription) - ✅ LIVE GETESTET!
 - **✅ Audio Extraction**: FFmpeg extrahiert Audio aus Video (16kHz WAV)
@@ -121,7 +124,7 @@ VidScaler/
 ## Installation (Alle Dependencies)
 ```bash
 pip install openai-whisper matplotlib pydub translators
-pip install --index-url https://test.pypi.org/simple/ smart-srt-translator
+pip install 'smart-srt-translator[openai]>=0.1.4'
 ```
 
 ## 🎉 Phase 3 Features (Übersetzung) - ✅ PRODUKTIONSREIF!
@@ -204,11 +207,33 @@ VLC lädt automatisch externe Untertitel-Dateien, wenn sie denselben Basisnamen 
 - SRT-Datei umbenennen/verschieben
 - In VLC: Untertitel > Unterspur > Deaktivieren
 
+## 🔧 Phase 7b: Translation Quality & Dynamic Subtitles (PR #12) - ✅ GEMERGT!
+- **✅ Parameter-Fix**: `min_seg_dur` → `min_segment_duration`, `reading_wpm` → `reading_speed_wpm` (stiller Fallback auf Google behoben)
+- **✅ Timing-Default**: `preserve_timing=True` statt `expand_timing` als Standard für Deutsche Übersetzungen
+- **✅ Validation Safety-Net**: `subtitle_validator.py` + `validation_dialog.py` → erkennt leere Segmente und Timing-Drift nach Übersetzung
+- **✅ Dynamische Schriftgröße**: Alle 3 Untertitel-Modi nutzen jetzt `max(9, round(13 × (0.4 + scale_ratio × 0.6)))`
+- **✅ DRY-Refactoring**: `_convert_srt_to_ass`, `_ensure_wrapstyle`, `_tweak_ass_style` als Klassenmethoden extrahiert
+- **✅ smart-srt-translator v0.1.4**: Batching (25 Segmente/Batch), Retry-Logik, gpt-4o statt gpt-4o-mini
+- **✅ Code-Rabbit Fixes**: 76 Smart Quotes → ASCII (SyntaxError!), UTF-8 `errors='replace'`, Docstrings 91.5%
+
+### Validation Safety-Net Architektur
+```python
+# subtitle_validator.py
+def validate_translation(original_path, translated_path) -> ValidationResult:
+    # Vergleicht Segment-Anzahl, erkennt leere Segmente (≥2%), Timing-Drift
+
+# validation_dialog.py
+class ValidationDialog:
+    # Tkinter-Dialog: "Abbrechen" oder "Trotzdem einbrennen"
+    # Thread-safe via root.after(0, ...) + threading.Event
+```
+
 ## 📋 Phase 8 Roadmap (Future)
+- **🔧 Temp-Dateinamen absichern**: `NamedTemporaryFile` statt manuelle Pfade (Race-Condition-Schutz) → eigener PR
+- **🔧 Translator-Refactoring**: OpenAI Auto/Explicit Code-Duplikation in translator.py auflösen → eigener PR
 - **🎯 Translation Editor**: GUI-Fenster zum manuellen Korrigieren von Übersetzungen
 - **📝 Segment-by-Segment Editing**: Wie AudioTranscriber, aber für übersetzte Texte
 - **🔄 Export-Integration**: Korrigierte Übersetzung direkt in Video-Pipeline
-- **⚡ Whisper-Tuning**: Bessere Prompt-Engineering für Übersetzungsqualität
 
 ## 🛠️ Technische Implementierung (Phase 3 Lösung)
 
@@ -218,20 +243,24 @@ VLC lädt automatisch externe Untertitel-Dateien, wenn sie denselben Basisnamen 
 
 ### SRT → ASS Konvertierungs-Pipeline
 ```python
-def _convert_srt_to_ass(src_srt: str, dst_ass: str):
-    subprocess.run([ffmpeg, "-sub_charenc", "UTF-8", "-i", src_srt, dst_ass])
+# Alle drei als Klassenmethoden von VideoProcessor (DRY-Refactoring aus PR #12)
 
-def _tweak_ass_style(ass_path: str, *, alignment: int, margin_v: int, 
-                     font_size: int = 15, outline: int = 2):
+def _convert_srt_to_ass(self, src_srt: str, dst_ass: str):
+    subprocess.run([self.ffmpeg_path, "-sub_charenc", "UTF-8", "-i", src_srt, dst_ass])
+
+@staticmethod
+def _tweak_ass_style(ass_path: str, *, alignment: int, margin_v: int,
+                     font_size: int = 13, outline: int = 2):
     # ASS V4+ Format Style-Zeile modifizieren
     # Felder: Fontsize(2), Outline(16), Shadow(17), Alignment(18), MarginV(21)
 ```
 
 ### Optimierte Style-Parameter
-- **FontSize**: 15 (vorher 20) - kompakter für Dual-Mode
+- **FontSize**: Dynamisch: `max(9, round(13 × (0.4 + scale_ratio × 0.6)))` → alle 3 Modi konsistent
 - **Margins**: L=2, R=2 (vorher 10/10) - mehr Platz für Text
 - **WrapStyle**: 3 - gleichmäßigere Textumbrüche
 - **Alignment**: TopCenter(8) vs BottomCenter(2)
+- **Padding**: Dynamisch skaliert, gerade Werte für Codec-Kompatibilität
 
 ### Video-Filter-Chain
 ```bash
@@ -294,7 +323,7 @@ sequenceDiagram
 
     User->>GUI: Select translation options
     GUI->>Translator: translate_srt(srt_path, source_lang, target_lang, method)
-    
+
     alt method == "openai"
         Translator->>SmartSRT: load_env_vars()
         SmartSRT-->>Translator: Environment loaded
@@ -311,7 +340,7 @@ sequenceDiagram
         Translator->>Translator: translate_via_whisper(video_path, srt_path, target_lang, model)
         Translator-->>Translator: Translated SRT
     end
-    
+
     Translator-->>GUI: Translation complete
     GUI->>FFmpeg: Process video with translated subtitles
     FFmpeg-->>GUI: Video with subtitles ready

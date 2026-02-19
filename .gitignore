@@ -81,3 +81,6 @@ Desktop.ini
 
 # Kilo Code workspace (AI assistant working files)
 .kilo/
+
+# Claude Code workspace (AI assistant working files)
+.claude/

@@ -422,40 +422,18 @@ class SubtitleTranslator:
                         # Language-aware defaults for German with optimization choice
                         is_de = (target_lang or "").lower().startswith("de")
                         if is_de and de_readability_optimization:
-                            # German STRICT TIMING mode: preserve timing but may lose segments
+                            # German EXPANSION mode (experimental, may cause timing drift)
                             de = _get_de_preset()
-                            debug_logger.debug("German STRICT TIMING mode parameters", {
+                            debug_logger.debug("German EXPANSION mode (experimental)", {
                                 "de_readability_optimization": True,
-                                "preserve_timing": True,
-                                "wrap_width": max(100, int(de["wrap_width"])),
-                                "balance": False,
-                                "smooth": False,
-                                "expand_timing": False
-                            })
-                            result_path = smart_translate_srt(
-                                input_path,
-                                src_lang=source_lang,
-                                tgt_lang=target_lang,
-                                provider=provider,
-                                preserve_timing=True,
-                                wrap_width=max(100, int(de["wrap_width"])),
-                                balance=False,
-                                smooth=False,
-                            )
-                        elif is_de:
-                            # German EXPANSION mode: recommended for German (default)
-                            de = _get_de_preset()
-                            debug_logger.debug("German EXPANSION mode parameters", {
-                                "de_readability_optimization": False,
                                 "expand_timing": True,
-                                "expansion_factor": de["expansion_factor"], 
+                                "expansion_factor": de["expansion_factor"],
                                 "min_seg_dur": de["min_seg_dur"],
                                 "reading_wpm": de["reading_wpm"],
                                 "min_gap_ms": de["min_gap_ms"],
                                 "wrap_width": max(100, int(de["wrap_width"])),
                                 "balance": False,
-                                "smooth": False,
-                                "preserve_timing": False
+                                "smooth": False
                             })
                             result_path = smart_translate_srt(
                                 input_path,
@@ -463,10 +441,29 @@ class SubtitleTranslator:
                                 tgt_lang=target_lang,
                                 provider=provider,
                                 expand_timing=True,
-                                expansion_factor=de["expansion_factor"], # 1.35
-                                min_seg_dur=de["min_seg_dur"],           # 2.2
-                                reading_wpm=de["reading_wpm"],           # 200
-                                min_gap_ms=de["min_gap_ms"],             # 120
+                                expansion_factor=de["expansion_factor"],
+                                min_segment_duration=de["min_seg_dur"],
+                                reading_speed_wpm=de["reading_wpm"],
+                                min_gap_ms=de["min_gap_ms"],
+                                wrap_width=max(100, int(de["wrap_width"])),
+                                balance=False,
+                                smooth=False,
+                            )
+                        elif is_de:
+                            # German PRESERVE TIMING mode (default, recommended)
+                            de = _get_de_preset()
+                            debug_logger.debug("German PRESERVE TIMING mode (default)", {
+                                "preserve_timing": True,
+                                "wrap_width": max(100, int(de["wrap_width"])),
+                                "balance": False,
+                                "smooth": False
+                            })
+                            result_path = smart_translate_srt(
+                                input_path,
+                                src_lang=source_lang,
+                                tgt_lang=target_lang,
+                                provider=provider,
+                                preserve_timing=True,
                                 wrap_width=max(100, int(de["wrap_width"])),
                                 balance=False,
                                 smooth=False,
@@ -566,40 +563,18 @@ class SubtitleTranslator:
                 # Call smart pipeline with language-aware defaults and optimization choice
                 is_de = (target_lang or "").lower().startswith("de")
                 if is_de and de_readability_optimization:
-                    # German STRICT TIMING mode: preserve timing but may lose segments
+                    # German EXPANSION mode (experimental, may cause timing drift)
                     de = _get_de_preset()
-                    debug_logger.debug("German STRICT TIMING mode parameters", {
+                    debug_logger.debug("German EXPANSION mode (experimental)", {
                         "de_readability_optimization": True,
-                        "preserve_timing": True,
-                        "wrap_width": max(100, int(de["wrap_width"])),
-                        "balance": False,
-                        "smooth": False,
-                        "expand_timing": False
-                    })
-                    result_path = smart_translate_srt(
-                        input_path,
-                        src_lang=source_lang,
-                        tgt_lang=target_lang,
-                        provider=provider,
-                        preserve_timing=True,
-                        wrap_width=max(100, int(de["wrap_width"])),
-                        balance=False,
-                        smooth=False,
-                    )
-                elif is_de:
-                    # German EXPANSION mode: recommended for German (default)
-                    de = _get_de_preset()
-                    debug_logger.debug("German EXPANSION mode parameters", {
-                        "de_readability_optimization": False,
                         "expand_timing": True,
-                        "expansion_factor": de["expansion_factor"], 
+                        "expansion_factor": de["expansion_factor"],
                         "min_seg_dur": de["min_seg_dur"],
                         "reading_wpm": de["reading_wpm"],
                         "min_gap_ms": de["min_gap_ms"],
                         "wrap_width": max(100, int(de["wrap_width"])),
                         "balance": False,
-                        "smooth": False,
-                        "preserve_timing": False
+                        "smooth": False
                     })
                     result_path = smart_translate_srt(
                         input_path,
@@ -607,10 +582,29 @@ class SubtitleTranslator:
                         tgt_lang=target_lang,
                         provider=provider,
                         expand_timing=True,
-                        expansion_factor=de["expansion_factor"], # 1.35
-                        min_seg_dur=de["min_seg_dur"],           # 2.2
-                        reading_wpm=de["reading_wpm"],           # 200
-                        min_gap_ms=de["min_gap_ms"],             # 120
+                        expansion_factor=de["expansion_factor"],
+                        min_segment_duration=de["min_seg_dur"],
+                        reading_speed_wpm=de["reading_wpm"],
+                        min_gap_ms=de["min_gap_ms"],
+                        wrap_width=max(100, int(de["wrap_width"])),
+                        balance=False,
+                        smooth=False,
+                    )
+                elif is_de:
+                    # German PRESERVE TIMING mode (default, recommended)
+                    de = _get_de_preset()
+                    debug_logger.debug("German PRESERVE TIMING mode (default)", {
+                        "preserve_timing": True,
+                        "wrap_width": max(100, int(de["wrap_width"])),
+                        "balance": False,
+                        "smooth": False
+                    })
+                    result_path = smart_translate_srt(
+                        input_path,
+                        src_lang=source_lang,
+                        tgt_lang=target_lang,
+                        provider=provider,
+                        preserve_timing=True,
                         wrap_width=max(100, int(de["wrap_width"])),
                         balance=False,
                         smooth=False,
@@ -665,29 +659,6 @@ class SubtitleTranslator:
                 return result_path
             except Exception as e:
                 debug_logger.error("OpenAI Translation FAILED", e)
-                # If user explicitly requested OpenAI, do not silently fall back
-                if method == "openai":
-                    raise
-                # Auto mode: try graceful fallbacks
-                # Prefer Google translators backend if available
-                if TRANSLATORS_AVAILABLE:
-                    debug_logger.step("FALLBACK: Using Google translators backend", {
-                        "src_lang": source_lang,
-                        "tgt_lang": target_lang,
-                    })
-                    return self._translate_srt_google(input_path, source_lang, target_lang)
-                # If Whisper is available and target is English and video is provided, use Whisper
-                if self.has_whisper and video_path and target_lang == "en":
-                    debug_logger.step("FALLBACK: Using Whisper translate (to English)", {
-                        "video_path": video_path,
-                        "whisper_model": whisper_model,
-                    })
-                    if self.whisper_translator is None:
-                        self.whisper_translator = WhisperTranslator()
-                    return self.whisper_translator.translate_via_whisper(
-                        video_path, input_path, "en", whisper_model
-                    )
-                # No viable fallback
                 raise
 
         if method == "whisper" and self.has_whisper and video_path:

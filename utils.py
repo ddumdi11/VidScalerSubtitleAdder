@@ -95,6 +95,7 @@ def is_video_file(file_path: str) -> bool:
 class ToolTip:
     """Einfacher Tooltip für tkinter widgets"""
     def __init__(self, widget, text):
+        """Bindet Enter/Leave-Events an das Widget für Tooltip-Anzeige."""
         import tkinter as tk
         self.widget = widget
         self.text = text
@@ -104,6 +105,7 @@ class ToolTip:
         widget.bind("<Leave>", self.hide)
 
     def show(self, event=None):
+        """Zeigt den Tooltip neben dem Widget an."""
         x = self.widget.winfo_rootx() + 25
         y = self.widget.winfo_rooty() + 25
 
@@ -117,6 +119,7 @@ class ToolTip:
         label.pack()
 
     def hide(self, event=None):
+        """Versteckt und zerstört das Tooltip-Fenster."""
         if self.tooltip_window:
             self.tooltip_window.destroy()
             self.tooltip_window = None
