@@ -65,8 +65,15 @@ def validate_translation(original_path: str, translated_path: str,
     Returns:
         ValidationResult mit Details
     """
-    orig_segments = parse_srt_segments(original_path)
-    trans_segments = parse_srt_segments(translated_path)
+    try:
+        orig_segments = parse_srt_segments(original_path)
+        trans_segments = parse_srt_segments(translated_path)
+    except (FileNotFoundError, PermissionError, OSError) as e:
+        return ValidationResult(
+            is_valid=False, empty_count=0, total_count=0,
+            empty_percentage=0.0, drift_start=None, drift_amount=0,
+            details=f"SRT-Datei nicht lesbar: {e}"
+        )
 
     total = len(orig_segments)
 
