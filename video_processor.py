@@ -24,7 +24,10 @@ else:
 
 
 class VideoProcessor:
+    """FFmpeg-basierte Video-Verarbeitung (Skalierung, Untertitel, Splitting)."""
+
     def __init__(self):
+        """Initialisiert den Prozessor und sucht den FFmpeg-Pfad."""
         self.ffmpeg_path = self._find_ffmpeg()
         
     def _find_ffmpeg(self) -> str:
@@ -350,47 +353,47 @@ class VideoProcessor:
                         logging.debug("Failed to cleanup temp file %s: %s", p, e)
                     
     def _convert_srt_to_ass(self, src_srt: str, dst_ass: str):
-        “””SRT -> ASS Konvertierung (UTF-8 erzwingen).”””
-        subprocess.run([self.ffmpeg_path, “-nostdin”, “-hide_banner”, “-loglevel”, “error”,
-                        “-y”, “-sub_charenc”, “UTF-8”, “-i”, src_srt, dst_ass],
+        """SRT -> ASS Konvertierung (UTF-8 erzwingen)."""
+        subprocess.run([self.ffmpeg_path, "-nostdin", "-hide_banner", "-loglevel", "error",
+                        "-y", "-sub_charenc", "UTF-8", "-i", src_srt, dst_ass],
             capture_output=True, text=True, shell=False, timeout=FFMPEG_TIMEOUT_SHORT,
             check=True, **SUBPROCESS_FLAGS)
 
     @staticmethod
     def _ensure_wrapstyle(ass_path: str, wrap_style: int = 3):
-        “””Setzt WrapStyle in einer ASS-Datei (3 = gleichmäßige Umbrüche).”””
-        with open(ass_path, “r”, encoding=”utf-8”) as f:
+        """Setzt WrapStyle in einer ASS-Datei (3 = gleichmäßige Umbrüche)."""
+        with open(ass_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         done = False
         for i, line in enumerate(lines):
-            if line.strip().lower().startswith(“wrapstyle:”):
-                lines[i] = f”WrapStyle: {wrap_style}\n”
+            if line.strip().lower().startswith("wrapstyle:"):
+                lines[i] = f"WrapStyle: {wrap_style}\n"
                 done = True
                 break
         if not done:
             for i, line in enumerate(lines):
-                if line.strip().lower().startswith(“[script info]”):
+                if line.strip().lower().startswith("[script info]"):
                     insert_at = i + 1
-                    while insert_at < len(lines) and lines[insert_at].strip().startswith(“;”):
+                    while insert_at < len(lines) and lines[insert_at].strip().startswith(";"):
                         insert_at += 1
-                    lines.insert(insert_at, f”WrapStyle: {wrap_style}\n”)
+                    lines.insert(insert_at, f"WrapStyle: {wrap_style}\n")
                     break
 
-        with open(ass_path, “w”, encoding=”utf-8”) as f:
+        with open(ass_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
 
     @staticmethod
     def _tweak_ass_style(ass_path: str, *, alignment: int, margin_v: int,
                          font_size: int = 13, outline: int = 2, shadow: int = 0,
                          margin_l: int = 2, margin_r: int = 2):
-        “””Passt ASS V4+ Style-Zeile an (Fontsize, Alignment, Margins etc.).”””
-        with open(ass_path, “r”, encoding=”utf-8”) as f:
+        """Passt ASS V4+ Style-Zeile an (Fontsize, Alignment, Margins etc.)."""
+        with open(ass_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         for i, line in enumerate(lines):
-            if line.strip().lower().startswith(“style: default”):
-                parts = [p.strip() for p in line.strip().split(“,”)]
+            if line.strip().lower().startswith("style: default"):
+                parts = [p.strip() for p in line.strip().split(",")]
                 if len(parts) >= 23:
                     parts[2]  = str(font_size)      # Fontsize
                     parts[16] = str(outline)         # Outline
@@ -399,16 +402,16 @@ class VideoProcessor:
                     parts[19] = str(margin_l)        # MarginL
                     parts[20] = str(margin_r)        # MarginR
                     parts[21] = str(margin_v)        # MarginV
-                    lines[i] = “,”.join(parts) + “\n”
+                    lines[i] = ",".join(parts) + "\n"
                 break
 
-        with open(ass_path, “w”, encoding=”utf-8”) as f:
+        with open(ass_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
 
     def scale_video_with_translation(self, input_path: str, output_path: str, new_width: int,
                                  original_subtitle_path: str, translated_subtitle_path: str,
-                                 translation_mode: str = “dual”):
-        “””Skaliert Video mit originalen und übersetzten Untertiteln (SRT -> ASS, feste Styles)”””
+                                 translation_mode: str = "dual"):
+        """Skaliert Video mit originalen und übersetzten Untertiteln (SRT -> ASS, feste Styles)"""
         temp_original_srt = temp_translated_srt = None
         temp_original_ass = temp_translated_ass = None
 

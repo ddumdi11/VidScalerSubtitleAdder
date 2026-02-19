@@ -19,6 +19,7 @@ class ValidationDialog:
     """
 
     def __init__(self, root: tk.Tk, result: ValidationResult):
+        """Initialisiert den Dialog mit Validierungsergebnis und threading.Event."""
         self.root = root
         self.result = result
         self.user_choice: Optional[str] = None  # "proceed" oder "abort"
@@ -97,8 +98,8 @@ class ValidationDialog:
         abort_btn.focus_set()
 
         # Enter = Abbrechen, Escape = Abbrechen
-        self.dialog.bind("<Return>", lambda e: self._on_abort())
-        self.dialog.bind("<Escape>", lambda e: self._on_abort())
+        self.dialog.bind("<Return>", lambda _: self._on_abort())
+        self.dialog.bind("<Escape>", lambda _: self._on_abort())
 
     def _on_proceed(self):
         """User wählt 'Trotzdem einbrennen'."""

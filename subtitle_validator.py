@@ -24,7 +24,7 @@ def parse_srt_segments(srt_path: str) -> List[Dict]:
     Jedes Segment hat: index, timestamp, text
     """
     segments = []
-    with open(srt_path, 'r', encoding='utf-8') as f:
+    with open(srt_path, 'r', encoding='utf-8', errors='replace') as f:
         content = f.read().strip()
 
     blocks = re.split(r'\r?\n\r?\n', content)

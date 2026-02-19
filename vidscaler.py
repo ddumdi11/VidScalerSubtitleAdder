@@ -581,22 +581,25 @@ class VidScalerApp:
             )
 
             # Übersetzung validieren vor dem Einbrennen
-            from subtitle_validator import validate_translation
-            from validation_dialog import ValidationDialog
+            try:
+                from subtitle_validator import validate_translation
+                from validation_dialog import ValidationDialog
 
-            validation_result = validate_translation(
-                self.current_subtitle_path, translated_path
-            )
+                validation_result = validate_translation(
+                    self.current_subtitle_path, translated_path
+                )
 
-            if not validation_result.is_valid:
-                # Dialog im Hauptthread anzeigen, auf Antwort warten
-                dialog = ValidationDialog(self.root, validation_result)
-                self.root.after(0, dialog.show)
-                user_choice = dialog.wait_for_choice()
+                if not validation_result.is_valid:
+                    # Dialog im Hauptthread anzeigen, auf Antwort warten
+                    dialog = ValidationDialog(self.root, validation_result)
+                    self.root.after(0, dialog.show)
+                    user_choice = dialog.wait_for_choice()
 
-                if user_choice == "abort":
-                    self.root.after(0, self._show_validation_aborted, translated_path)
-                    return
+                    if user_choice == "abort":
+                        self.root.after(0, self._show_validation_aborted, translated_path)
+                        return
+            except ImportError:
+                pass  # Validierung nicht verfügbar — ohne Validierung weiter
 
             self.root.after(0, lambda: self.progress_var.set("Video wird mit Untertiteln verarbeitet..."))
             
