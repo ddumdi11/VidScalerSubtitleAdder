@@ -306,6 +306,10 @@ class AudioTranscriber:
         self.transcribe_button.config(state="normal")
         self.export_button.config(state="normal")
         
+        # TreeView und Edit-Feld leeren (wichtig bei erneuter Transkription)
+        self.segments_tree.delete(*self.segments_tree.get_children())
+        self.edit_text.delete(1.0, tk.END)
+
         # Ergebnisse in TreeView anzeigen
         for segment in self.audio_segments:
             time_str = f"{self._format_time(segment.start)} - {self._format_time(segment.end)}"
