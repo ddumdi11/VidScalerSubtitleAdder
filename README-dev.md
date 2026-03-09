@@ -48,9 +48,9 @@ VidScaler vereinfacht das Skalieren von Videos, die mit dem Windows Snipping-Too
    ```
    Optional für Text-Exzerpt:
    ```bash
-   pip install spacy openai
-   python -m spacy download de_core_news_sm  # Deutsches Sprachmodell
-   python -m spacy download en_core_web_sm # Englisches Sprachmodell "efficiency"
+   py -m pip install spacy openai
+   py -m spacy download de_core_news_sm  # Deutsches Sprachmodell
+   py -m spacy download en_core_web_sm  # Englisches Sprachmodell "efficiency"
    ```
 5. Anwendung starten:
    ```bash
@@ -94,11 +94,11 @@ ffmpeg -i input.mp4 -vf "scale=WIDTH:-2,pad=iw:ih+100:0:0:black,subtitles=subtit
 
 **Doppelte Untertitel (SRT -> ASS Pipeline):**
 ```bash
-ffmpeg -i input.mp4 -vf "scale=WIDTH:-2,pad=iw:ih+300:0:140:black,ass=original.ass,ass=translated.ass" output.mp4
+ffmpeg -i input.mp4 -vf "scale=WIDTH:-2,pad=iw:ih+(TOP_PAD+BOT_PAD):0:TOP_PAD:black,ass=original.ass,ass=translated.ass" output.mp4
 ```
 
 - `-2` erzwingt gerade Pixelwerte für Codec-Kompatibilität
-- `pad` erweitert das Video nach unten für Untertitel (dynamische Höhe)
+- `pad` erweitert das Video oben und/oder unten je nach Modus (TOP_PAD und BOT_PAD werden dynamisch berechnet, skaliert mit der Video-Breite)
 - `subtitles` / `ass` brennt die Untertitel ins Video ein
 - Dynamische Schriftgröße: `max(9, round(13 * (0.4 + scale_ratio * 0.6)))`
 
