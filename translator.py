@@ -323,16 +323,17 @@ class SubtitleTranslator:
 
         Im Gegensatz zu parse_srt() werden auch Blöcke mit weniger als 3 Zeilen
         (= leerer Text) aufgenommen, damit die Segment-Anzahl erhalten bleibt.
+        Unterstützt sowohl LF als auch CRLF (Windows-Dateien).
         """
-        with open(srt_path, 'r', encoding='utf-8') as f:
+        with open(srt_path, 'r', encoding='utf-8', errors='replace') as f:
             content = f.read().strip()
 
         segments: List[Dict] = []
-        blocks = content.split('\n\n')
+        blocks = re.split(r'\r?\n\r?\n+', content)
         for block in blocks:
             if not block.strip():
                 continue
-            lines = block.strip().split('\n')
+            lines = block.strip().splitlines()
             if len(lines) < 2:
                 continue
             try:
@@ -365,25 +366,33 @@ class SubtitleTranslator:
             "empty_indices": sorted(empty_map.keys()),
         })
 
-        # Gefilterte SRT ohne leere Segmente schreiben (durchnummeriert 1..N)
+        # Gefilterte SRT in einzigartige Temp-Datei schreiben (durchnummeriert 1..N)
         dir_name = os.path.dirname(input_path) or '.'
-        base, ext = os.path.splitext(os.path.basename(input_path))
-        filtered_path = os.path.join(dir_name, f"_tmp_filtered_{base}{ext}")
+        fd, filtered_path = tempfile.mkstemp(suffix='.srt', prefix='_tmp_filtered_', dir=dir_name)
+        tmp_result_path: Optional[str] = None
 
         try:
-            with open(filtered_path, 'w', encoding='utf-8') as f:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 for i, seg in enumerate(non_empty, 1):
                     f.write(f"{i}\n{seg['timestamp']}\n{seg['text']}\n\n")
 
             # Übersetzen (nur nicht-leere Segmente — direkt, nicht über Wrapper)
-            result_path = smart_translate_srt(filtered_path, **kwargs)
+            tmp_result_path = smart_translate_srt(filtered_path, **kwargs)
 
             # Übersetzte Segmente parsen
-            translated = self._parse_srt_permissive(result_path)
+            translated = self._parse_srt_permissive(tmp_result_path)
+
+            expected_count = len(non_empty)
+            if len(translated) != expected_count:
+                debug_logger.warning("Translated segment count mismatch", {
+                    "expected": expected_count,
+                    "got": len(translated),
+                })
 
             # Leere Segmente an Original-Positionen wieder einfügen
             merged: List[Dict] = []
             trans_iter = iter(translated)
+            non_empty_iter = iter(non_empty)
             for seg in all_segments:
                 if seg['index'] in empty_map:
                     merged.append({
@@ -393,31 +402,52 @@ class SubtitleTranslator:
                     })
                 else:
                     t = next(trans_iter, None)
+                    orig = next(non_empty_iter, None)
                     if t:
                         merged.append({
                             'index': seg['index'],
                             'timestamp': seg['timestamp'],
                             'text': t['text']
                         })
+                    elif orig:
+                        # Fallback: Original-Text wenn Übersetzung kürzer als erwartet
+                        debug_logger.warning("Missing translation for segment, using original", {
+                            "index": seg['index'],
+                        })
+                        merged.append({
+                            'index': seg['index'],
+                            'timestamp': seg['timestamp'],
+                            'text': orig['text']
+                        })
 
-            # Ergebnis mit allen Segmenten überschreiben
-            with open(result_path, 'w', encoding='utf-8') as f:
+            # Finales Ergebnis: Suffix von smart_translate_srt übernehmen,
+            # aber auf den originalen input_path-Basisnamen anwenden
+            filtered_base = os.path.splitext(os.path.basename(filtered_path))[0]
+            result_base = os.path.splitext(os.path.basename(tmp_result_path))[0]
+            suffix = result_base[len(filtered_base):]  # z.B. "_translated_smart_de"
+
+            input_base, input_ext = os.path.splitext(input_path)
+            final_path = f"{input_base}{suffix}{input_ext}"
+
+            with open(final_path, 'w', encoding='utf-8') as f:
                 for seg in merged:
                     f.write(f"{seg['index']}\n{seg['timestamp']}\n{seg['text']}\n\n")
 
             debug_logger.debug("Restored empty segments in translation", {
                 "translated_count": len(translated),
                 "merged_count": len(merged),
-                "result_path": result_path,
+                "final_path": final_path,
             })
 
-            return result_path
+            return final_path
         finally:
-            try:
-                if os.path.exists(filtered_path):
-                    os.remove(filtered_path)
-            except OSError:
-                pass
+            # Temp-Dateien aufräumen
+            for p in [filtered_path, tmp_result_path]:
+                if p and os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
 
     def translate_text(self, text: str, source_lang: str, target_lang: str) -> str:
         """Übersetzt einen Text"""
