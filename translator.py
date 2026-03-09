@@ -318,6 +318,137 @@ class SubtitleTranslator:
                 
         return segments
     
+    def _parse_srt_permissive(self, srt_path: str) -> List[Dict]:
+        """Parse SRT inklusive leerer Segmente (nur Index + Timestamp, kein Text).
+
+        Im Gegensatz zu parse_srt() werden auch Blöcke mit weniger als 3 Zeilen
+        (= leerer Text) aufgenommen, damit die Segment-Anzahl erhalten bleibt.
+        Unterstützt sowohl LF als auch CRLF (Windows-Dateien).
+        """
+        with open(srt_path, 'r', encoding='utf-8', errors='replace') as f:
+            content = f.read().strip()
+
+        segments: List[Dict] = []
+        blocks = re.split(r'\r?\n\r?\n+', content)
+        for block in blocks:
+            if not block.strip():
+                continue
+            lines = block.strip().splitlines()
+            if len(lines) < 2:
+                continue
+            try:
+                index = int(lines[0])
+                timestamp = lines[1]
+                text = '\n'.join(lines[2:]).strip() if len(lines) >= 3 else ''
+                segments.append({'index': index, 'timestamp': timestamp, 'text': text})
+            except (ValueError, IndexError):
+                continue
+        return segments
+
+    def _translate_smart_with_empty_handling(self, input_path: str, **kwargs) -> str:
+        """Wrapper um smart_translate_srt: filtert leere Segmente vor der Übersetzung
+        und fügt sie danach an den richtigen Positionen wieder ein.
+
+        Der smart-srt-translator überspringt leere SRT-Segmente, was zu
+        Segment-Verlust führt und auch angrenzende Text-Segmente verlieren kann.
+        """
+        all_segments = self._parse_srt_permissive(input_path)
+        empty_map = {seg['index']: seg for seg in all_segments if not seg['text']}
+
+        if not empty_map:
+            return smart_translate_srt(input_path, **kwargs)
+
+        non_empty = [seg for seg in all_segments if seg['text']]
+        debug_logger.debug("Filtering empty segments before translation", {
+            "total": len(all_segments),
+            "empty": len(empty_map),
+            "non_empty": len(non_empty),
+            "empty_indices": sorted(empty_map.keys()),
+        })
+
+        # Gefilterte SRT in einzigartige Temp-Datei schreiben (durchnummeriert 1..N)
+        dir_name = os.path.dirname(input_path) or '.'
+        fd, filtered_path = tempfile.mkstemp(suffix='.srt', prefix='_tmp_filtered_', dir=dir_name)
+        tmp_result_path: Optional[str] = None
+
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                for i, seg in enumerate(non_empty, 1):
+                    f.write(f"{i}\n{seg['timestamp']}\n{seg['text']}\n\n")
+
+            # Übersetzen (nur nicht-leere Segmente — direkt, nicht über Wrapper)
+            tmp_result_path = smart_translate_srt(filtered_path, **kwargs)
+
+            # Übersetzte Segmente parsen
+            translated = self._parse_srt_permissive(tmp_result_path)
+
+            expected_count = len(non_empty)
+            if len(translated) != expected_count:
+                debug_logger.warning("Translated segment count mismatch", {
+                    "expected": expected_count,
+                    "got": len(translated),
+                })
+
+            # Leere Segmente an Original-Positionen wieder einfügen
+            merged: List[Dict] = []
+            trans_iter = iter(translated)
+            non_empty_iter = iter(non_empty)
+            for seg in all_segments:
+                if seg['index'] in empty_map:
+                    merged.append({
+                        'index': seg['index'],
+                        'timestamp': seg['timestamp'],
+                        'text': ''
+                    })
+                else:
+                    t = next(trans_iter, None)
+                    orig = next(non_empty_iter, None)
+                    if t:
+                        merged.append({
+                            'index': seg['index'],
+                            'timestamp': seg['timestamp'],
+                            'text': t['text']
+                        })
+                    elif orig:
+                        # Fallback: Original-Text wenn Übersetzung kürzer als erwartet
+                        debug_logger.warning("Missing translation for segment, using original", {
+                            "index": seg['index'],
+                        })
+                        merged.append({
+                            'index': seg['index'],
+                            'timestamp': seg['timestamp'],
+                            'text': orig['text']
+                        })
+
+            # Finales Ergebnis: Suffix von smart_translate_srt übernehmen,
+            # aber auf den originalen input_path-Basisnamen anwenden
+            filtered_base = os.path.splitext(os.path.basename(filtered_path))[0]
+            result_base = os.path.splitext(os.path.basename(tmp_result_path))[0]
+            suffix = result_base[len(filtered_base):]  # z.B. "_translated_smart_de"
+
+            input_base, input_ext = os.path.splitext(input_path)
+            final_path = f"{input_base}{suffix}{input_ext}"
+
+            with open(final_path, 'w', encoding='utf-8') as f:
+                for seg in merged:
+                    f.write(f"{seg['index']}\n{seg['timestamp']}\n{seg['text']}\n\n")
+
+            debug_logger.debug("Restored empty segments in translation", {
+                "translated_count": len(translated),
+                "merged_count": len(merged),
+                "final_path": final_path,
+            })
+
+            return final_path
+        finally:
+            # Temp-Dateien aufräumen
+            for p in [filtered_path, tmp_result_path]:
+                if p and os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
+
     def translate_text(self, text: str, source_lang: str, target_lang: str) -> str:
         """Übersetzt einen Text"""
         if source_lang == target_lang:
@@ -435,7 +566,7 @@ class SubtitleTranslator:
                                 "balance": False,
                                 "smooth": False
                             })
-                            result_path = smart_translate_srt(
+                            result_path = self._translate_smart_with_empty_handling(
                                 input_path,
                                 src_lang=source_lang,
                                 tgt_lang=target_lang,
@@ -458,7 +589,7 @@ class SubtitleTranslator:
                                 "balance": False,
                                 "smooth": False
                             })
-                            result_path = smart_translate_srt(
+                            result_path = self._translate_smart_with_empty_handling(
                                 input_path,
                                 src_lang=source_lang,
                                 tgt_lang=target_lang,
@@ -470,7 +601,7 @@ class SubtitleTranslator:
                             )
                         else:
                             # Conservative non-DE defaults
-                            result_path = smart_translate_srt(
+                            result_path = self._translate_smart_with_empty_handling(
                                 input_path,
                                 src_lang=source_lang,
                                 tgt_lang=target_lang,
@@ -576,7 +707,7 @@ class SubtitleTranslator:
                         "balance": False,
                         "smooth": False
                     })
-                    result_path = smart_translate_srt(
+                    result_path = self._translate_smart_with_empty_handling(
                         input_path,
                         src_lang=source_lang,
                         tgt_lang=target_lang,
@@ -599,7 +730,7 @@ class SubtitleTranslator:
                         "balance": False,
                         "smooth": False
                     })
-                    result_path = smart_translate_srt(
+                    result_path = self._translate_smart_with_empty_handling(
                         input_path,
                         src_lang=source_lang,
                         tgt_lang=target_lang,
@@ -611,7 +742,7 @@ class SubtitleTranslator:
                     )
                 else:
                     # Conservative non-DE defaults
-                    result_path = smart_translate_srt(
+                    result_path = self._translate_smart_with_empty_handling(
                         input_path,
                         src_lang=source_lang,
                         tgt_lang=target_lang,
@@ -680,12 +811,15 @@ class SubtitleTranslator:
     
     def _translate_srt_google(self, input_path: str, source_lang: str, target_lang: str) -> str:
         """Übersetzt SRT mit Google Translate (ursprüngliche Methode)"""
-        segments = self.parse_srt(input_path)
-        
-        # Übersetzung durchführen
+        segments = self._parse_srt_permissive(input_path)
+
+        # Übersetzung durchführen (leere Segmente überspringen, aber beibehalten)
         translated_segments = []
         for segment in segments:
-            translated_text = self.translate_text(segment['text'], source_lang, target_lang)
+            if segment['text']:
+                translated_text = self.translate_text(segment['text'], source_lang, target_lang)
+            else:
+                translated_text = ''
             translated_segments.append({
                 'index': segment['index'],
                 'timestamp': segment['timestamp'],
