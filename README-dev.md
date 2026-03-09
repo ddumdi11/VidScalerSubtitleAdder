@@ -89,7 +89,7 @@ ffmpeg -i input.mp4 -vf scale=WIDTH:-2 output_scaled.mp4
 
 **Skalierung mit Untertiteln (SRT-Modus):**
 ```bash
-ffmpeg -i input.mp4 -vf "scale=WIDTH:-2,pad=iw:ih+100:0:0:black,subtitles=subtitles.srt" output_subtitled.mp4
+ffmpeg -i input.mp4 -vf "scale=WIDTH:-2,pad=iw:ih+BOT_PAD:0:0:black,subtitles=subtitles.srt" output_subtitled.mp4
 ```
 
 **Doppelte Untertitel (SRT -> ASS Pipeline):**
