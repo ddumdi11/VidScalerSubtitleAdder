@@ -16,12 +16,14 @@ VidScaler vereinfacht das Skalieren von Videos, die mit dem Windows Snipping-Too
 - **FFmpeg-Integration**: Nahtlose Videobearbeitung über Python subprocess
 - **Windows-optimiert**: Speziell für Windows 11 entwickelt
 - **Untertitel-Einfügen**: Brennt Untertitel aus .srt-Dateien unterhalb des Videos ein (mit automatischer Videoerweiterung)
-- **🆕 Audio-Transkription**: Erstellt automatisch SRT-Dateien aus Video-Audio mit OpenAI Whisper
+- **Audio-Transkription**: Erstellt automatisch SRT-Dateien aus Video-Audio mit OpenAI Whisper
 - **Untertitel-Übersetzer**: Zeigt Original-Untertitel oberhalb und übersetzte Untertitel unterhalb des Videos an - wahlweise auch nur die Übersetzung
-  - **OpenAI Translation (beste Qualität)**: Hochwertige KI-Übersetzung via smart-srt-translator 
+  - **OpenAI Translation (beste Qualität)**: Hochwertige KI-Übersetzung via smart-srt-translator
   - **Google Translate (schnell)**: Kostenlose, schnelle Übersetzung
   - **Whisper Translation (English-only)**: Lokale Übersetzung, nur nach Englisch
-- **📄 Text-Exzerpt**: Konvertiert SRT-Dateien zu gut lesbaren Text-/Markdown-Dokumenten mit KI-Veredelung
+- **Übersetzungs-Qualitätsprüfung**: Automatische Validierung der Segment-Anzahl und Drift-Erkennung vor dem Einbrennen
+- **Text-Exzerpt**: Konvertiert SRT-Dateien zu gut lesbaren Text-/Markdown-Dokumenten mit KI-Veredelung
+- **Smart Split**: Videos in konfigurierbare Segmente aufteilen mit einstellbarer Überlappung
 
 ## Voraussetzungen
 
@@ -68,10 +70,13 @@ VidScaler vereinfacht das Skalieren von Videos, die mit dem Windows Snipping-Too
 3. "Video auswählen" klicken und gewünschte Videodatei auswählen
 4. "Video analysieren" klicken - aktuelle Auflösung wird angezeigt
 5. Gewünschte Skalierung aus Dropdown-Menü wählen
-6. **🆕 SRT aus Audio erstellen:** "Audio transkribieren" klicken → separates Fenster öffnet sich → Audio wird extrahiert und mit Whisper transkribiert → Text editieren → als SRT exportieren
-7. **📄 Text-Exzerpt erstellen:** "Text-Exzerpt erstellen" klicken → SRT wird zu gut lesbarem Text verarbeitet → optional mit SpaCy (Satzgrenzen) und OpenAI (KI-Veredelung) → als .txt oder .md exportieren
-8. **Ohne Untertitel:** "Video skalieren" klicken - das bearbeitete Video wird mit "_scaled" Suffix gespeichert
-9. **Mit Untertiteln:** "Untertitel wählen..." klicken und .srt-Datei auswählen, dann "Mit Untertiteln skalieren" - das Video wird mit "_subtitled" Suffix gespeichert
+6. **SRT aus Audio erstellen:** "Audio transkribieren" klicken - separates Fenster öffnet sich - Audio wird extrahiert und mit Whisper transkribiert - Text editieren - als SRT exportieren
+7. **Text-Exzerpt erstellen:** "Text-Exzerpt erstellen" klicken - SRT wird zu gut lesbarem Text verarbeitet - optional mit SpaCy (Satzgrenzen) und OpenAI (KI-Veredelung) - als .txt oder .md exportieren
+8. Aktion über einen der 4 Buttons auswählen:
+   - **"Video skalieren"** - nur Skalierung, Ausgabe mit `_scaled` Suffix
+   - **"Mit Original-Untertiteln"** - Original-SRT unten im Video, Ausgabe mit `_subtitled` Suffix
+   - **"Mit Übersetzung"** - nur übersetzte Untertitel unten, Ausgabe mit `_translated` Suffix
+   - **"Mit Original + Übersetzung"** - Original oben, Übersetzung unten, Ausgabe mit `_dual_subtitled` Suffix
 
 ## Technische Details
 
@@ -79,31 +84,54 @@ Die Anwendung verwendet folgende FFmpeg-Befehle:
 
 **Normale Skalierung:**
 ```bash
-ffmpeg -i input.mp4 -vf scale=WIDTH:-1 output_scaled.mp4
+ffmpeg -i input.mp4 -vf scale=WIDTH:-2 output_scaled.mp4
 ```
 
-**Skalierung mit Untertiteln:**
+**Skalierung mit Untertiteln (SRT-Modus):**
 ```bash
-ffmpeg -i input.mp4 -vf "scale=WIDTH:-2,pad=iw:ih+100:0:0:black,subtitles=subtitles.srt:force_style='Alignment=2,MarginV=20'" output_subtitled.mp4
+ffmpeg -i input.mp4 -vf "scale=WIDTH:-2,pad=iw:ih+100:0:0:black,subtitles=subtitles.srt" output_subtitled.mp4
 ```
 
-- `-1` sorgt für automatische, proportionale Höhenberechnung
-- `-2` erzwingt gerade Pixelwerte für bessere Kompatibilität  
-- `pad` erweitert das Video um 100px nach unten für Untertitel
-- `subtitles` brennt die Untertitel unten ins Video ein
+**Doppelte Untertitel (SRT -> ASS Pipeline):**
+```bash
+ffmpeg -i input.mp4 -vf "scale=WIDTH:-2,pad=iw:ih+300:0:140:black,ass=original.ass,ass=translated.ass" output.mp4
+```
+
+- `-2` erzwingt gerade Pixelwerte für Codec-Kompatibilität
+- `pad` erweitert das Video nach unten für Untertitel (dynamische Höhe)
+- `subtitles` / `ass` brennt die Untertitel ins Video ein
+- Dynamische Schriftgröße: `max(9, round(13 * (0.4 + scale_ratio * 0.6)))`
+
+**Smart Split:**
+```bash
+ffmpeg -ss START -i input.mp4 -to DURATION -c copy -avoid_negative_ts make_zero output_partXX.mp4
+```
+
+## Übersetzungs-Qualitätsprüfung
+
+Vor dem Einbrennen übersetzter Untertitel wird automatisch geprüft:
+
+- **Segment-Anzahl**: Stimmt Original (z.B. 113) mit Übersetzung überein?
+- **Leere Segmente**: Wurden Texte bei der Übersetzung verloren?
+- **Drift-Erkennung**: Haben sich Inhalte durch Segment-Merging verschoben?
+
+Bei Problemen erscheint ein Dialog mit der Option "Abbrechen" oder "Trotzdem einbrennen".
 
 ## Fehlerbehebung
 
-**"Höhe nicht durch 2 teilbar" Fehler**: 
+**"Höhe nicht durch 2 teilbar" Fehler**:
 Die Anwendung berechnet automatisch gerade Pixelwerte, um diesen häufigen FFmpeg-Fehler zu vermeiden.
 
-**FFmpeg nicht gefunden**: 
+**FFmpeg nicht gefunden**:
 Stelle sicher, dass FFmpeg korrekt installiert und im System-PATH verfügbar ist.
 
 **Untertitel werden nicht angezeigt**:
 - Prüfe, ob die .srt-Datei korrekt formatiert ist
 - Unterstützte Formate: .srt, .ass, .vtt
 - Stelle sicher, dass die Zeitangaben im Video existieren
+
+**Doppelte Untertitel in VLC**:
+VLC lädt automatisch externe .srt-Dateien mit gleichem Basisnamen. Video in anderen Ordner verschieben oder in VLC unter Untertitel > Unterspur > Deaktivieren.
 
 ## Lizenz
 
